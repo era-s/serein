@@ -294,6 +294,82 @@ enum CalendarVerification {
                "An external permission restriction clears choices and confirmed review on activation")
     }
 
+    private static func checkEmptySnapshots() async {
+        let chosenDate = date("2026-09-09T13:00:00+09:00")
+        let timeZone = TimeZone(identifier: "Asia/Seoul")!
+        let provider = FakeCalendarProvider(access: .authorized)
+        let model = CalendarImportModel(provider: provider, date: chosenDate, timeZone: timeZone)
+        await model.loadIfAuthorized()
+        model.selectedCalendarIDs = ["school"]
+        model.confirmed = true
+        expect(!model.isEmptySnapshot && !model.canImport && !model.validateForImport(),
+               "An unfetched review cannot be mistaken for a confirmed empty calendar week")
+
+        await model.fetchEvents()
+        expect(model.isEmptySnapshot && model.result != nil && model.reviewEntries.isEmpty && !model.confirmed && !model.canImport,
+               "A successfully fetched empty week is identifiable and still requires confirmation")
+        model.confirmed = true
+        expect(model.canImport && model.validateForImport(),
+               "A confirmed empty week can establish a calendar connection for future automation")
+
+        model.selectedDate = date("2026-09-16T13:00:00+09:00")
+        expect(!model.isEmptySnapshot && !model.confirmed && !model.canImport,
+               "Changing the week invalidates a previously confirmed empty snapshot")
+        model.selectedDate = chosenDate
+        provider.records = [event("real", "2026-09-09T10:00:00+09:00", "2026-09-09T11:00:00+09:00")]
+        await model.fetchEvents()
+        model.selectedEntryIDs = []
+        model.confirmed = true
+        expect(!model.isEmptySnapshot && !model.canImport && !model.validateForImport(),
+               "Deselecting all fetched events cannot masquerade as an empty-week connection")
+
+        provider.records = []
+        await model.fetchEvents()
+        model.confirmed = true
+        provider.access = .denied
+        expect(!model.validateForImport() && model.result == nil && !model.isEmptySnapshot && model.error != nil,
+               "Revoking permission after an empty review rejects connection and discards the snapshot")
+        provider.access = .authorized
+        await model.loadIfAuthorized()
+        model.selectedCalendarIDs = ["school"]
+        await model.fetchEvents()
+        model.confirmed = true
+        provider.availableCalendars.removeAll { $0.id == "school" }
+        expect(!model.validateForImport() && model.result == nil && !model.isEmptySnapshot && model.error != nil,
+               "Deleting the selected calendar after an empty review rejects connection instead of clearing entries")
+
+        provider.availableCalendars = [.init(id: "school", title: "Classes", account: "Synthetic Google", colorHex: 0xE86E36)]
+        await model.refreshCalendars()
+        model.selectedCalendarIDs = ["school"]
+        provider.eventError = CalendarImportError.calendarsChanged
+        await model.fetchEvents()
+        model.confirmed = true
+        expect(model.error != nil && model.result == nil && !model.isEmptySnapshot && !model.canImport && !model.validateForImport(),
+               "A failed event fetch never becomes an importable empty snapshot")
+        provider.eventError = nil
+        model.selectedCalendarIDs = []
+        await model.fetchEvents()
+        model.confirmed = true
+        expect(model.error != nil && !model.isEmptySnapshot && !model.canImport,
+               "No selected calendar cannot establish an empty connection")
+
+        model.selectedCalendarIDs = ["school"]
+        provider.suspendEvents = true
+        let pendingIndex = provider.eventRequests.count
+        let pending = Task { await model.fetchEvents() }
+        await waitForRequests(pendingIndex + 1, provider: provider)
+        model.confirmed = true
+        expect(model.isLoading && !model.isEmptySnapshot && !model.canImport,
+               "A pending empty-looking read is not an importable empty snapshot")
+        provider.completeRequest(pendingIndex, with: [])
+        await pending.value
+        expect(model.isEmptySnapshot && !model.confirmed && !model.canImport,
+               "Completion of an empty read requires fresh confirmation after loading")
+        model.confirmed = true
+        expect(model.canImport && model.validateForImport() && provider.permissionRequests == 0,
+               "A completed empty read passes the same permission and source checks without requesting new access")
+    }
+
     private static func checkStaleRequests(date chosenDate: Date, timeZone: TimeZone) async {
         let provider = FakeCalendarProvider(access: .authorized)
         provider.suspendEvents = true
@@ -350,6 +426,7 @@ enum CalendarVerification {
         try checkPersistence()
         checkMerging()
         await checkModel()
+        await checkEmptySnapshots()
         print("Calendar verification completed: \(checks) checks passed using synthetic fixtures only.")
     }
 }
@@ -367,6 +444,7 @@ private final class FakeCalendarProvider: CalendarProviding {
     var eventRequests: [Request] = []
     var records: [CalendarEventRecord] = []
     var suspendEvents = false
+    var eventError: Error?
     var availableCalendars: [CalendarDescriptor] = [
         .init(id: "school", title: "Classes", account: "Synthetic Google", colorHex: 0xE86E36),
         .init(id: "personal", title: "Personal", account: "Synthetic iCloud", colorHex: 0x728A53)
@@ -392,6 +470,7 @@ private final class FakeCalendarProvider: CalendarProviding {
         if suspendEvents {
             return try await withCheckedThrowingContinuation { pending[index] = $0 }
         }
+        if let eventError { throw eventError }
         return records.filter { calendarIDs.contains($0.calendarID) }
     }
 

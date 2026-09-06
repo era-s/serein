@@ -5,14 +5,14 @@ struct CalendarImportView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: CalendarImportModel
     let existingEntries: [ScheduleEntry]
-    let onImport: ([ScheduleEntry], Bool, String?) -> Void
+    let onImport: ([ScheduleEntry], Bool, String?, CalendarConnection) -> Void
     @State private var editingEntry: ScheduleEntry?
     @State private var replace = true
     @State private var includeWeekTitle = true
     @State private var showGoogleHelp = false
 
     init(model: CalendarImportModel, existingEntries: [ScheduleEntry],
-         onImport: @escaping ([ScheduleEntry], Bool, String?) -> Void) {
+         onImport: @escaping ([ScheduleEntry], Bool, String?, CalendarConnection) -> Void) {
         _model = StateObject(wrappedValue: model)
         self.existingEntries = existingEntries
         self.onImport = onImport
@@ -40,12 +40,12 @@ struct CalendarImportView: View {
         .padding(28).frame(width: 850, height: 700)
         .background(StudioStyle.sidebar).foregroundStyle(StudioStyle.ink).tint(StudioStyle.accent)
         .task { await model.loadIfAuthorized() }
-        .onReceive(NotificationCenter.default.publisher(for: .EKEventStoreChanged)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .EKEventStoreChanged).receive(on: RunLoop.main)) { _ in
             guard !model.isDemo else { return }
             model.invalidateResult()
             Task { await model.refreshCalendars() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification).receive(on: RunLoop.main)) { _ in
             model.refreshAfterExternalChange()
         }
         .onDisappear { model.invalidateResult() }
@@ -215,7 +215,7 @@ struct CalendarImportView: View {
                 sectionLabel("03", "일정 확인")
                 Spacer()
                 if model.result != nil {
-                    Text("\(selectedEntries.count) / \(model.reviewEntries.count)개 선택")
+                    Text(model.isEmptySnapshot ? "빈 주간 시간표" : "\(selectedEntries.count) / \(model.reviewEntries.count)개 선택")
                         .font(.system(size: 10, design: .monospaced)).foregroundStyle(StudioStyle.muted)
                 }
             }
@@ -237,7 +237,7 @@ struct CalendarImportView: View {
                     VStack(alignment: .leading, spacing: 9) {
                         if model.reviewEntries.isEmpty {
                             emptyReview(symbol: "calendar", title: "이 주에는 가져올 일정이 없어요",
-                                        detail: "선택한 캘린더에 시간이 지정된 일정이 없습니다. 다른 캘린더나 주를 선택해보세요.")
+                                        detail: "시간이 지정된 일정이 없어도 빈 시간표로 연결할 수 있어요. 연결 후 자동 교체를 켜면 추가되는 일정과 다음 주 일정을 반영할 수 있습니다.")
                         } else {
                             HStack(spacing: 10) {
                                 Button("모두 선택") { model.selectedEntryIDs = Set(model.reviewEntries.map(\.id)); model.confirmed = false }
@@ -292,21 +292,30 @@ struct CalendarImportView: View {
                 VStack(alignment: .leading, spacing: 9) {
                     Toggle("기존 시간표를 이 일정으로 교체", isOn: $replace)
                     Toggle("선택한 주를 제목에 표시", isOn: $includeWeekTitle)
-                    Toggle("선택한 일정의 요일과 시간을 확인했습니다", isOn: $model.confirmed)
-                        .disabled(model.result == nil || model.isLoading || selectedEntries.isEmpty)
+                    Toggle(model.isEmptySnapshot
+                           ? (replace ? "기존 시간표를 비우고 연결할 것을 확인했습니다" : "빈 주간 시간표로 연결할 것을 확인했습니다")
+                           : "선택한 일정의 요일과 시간을 확인했습니다", isOn: $model.confirmed)
+                        .disabled(model.result == nil || model.isLoading || (!model.isEmptySnapshot && selectedEntries.isEmpty))
                         .accessibilityIdentifier("confirm-calendar-review")
                 }.toggleStyle(.checkbox).font(.system(size: 11))
                 Spacer(minLength: 0)
                 Button("취소") { dismiss() }.buttonStyle(StudioButtonStyle(primary: false)).keyboardShortcut(.cancelAction)
-                Button("\(selectedEntries.count)개 일정 반영") {
+                Button(model.isEmptySnapshot ? "빈 주간 시간표로 연결" : "\(selectedEntries.count)개 일정 반영") {
                     guard model.validateForImport() else { return }
-                    onImport(selectedEntries, replace, includeWeekTitle ? model.week.label : nil)
+                    let connection = CalendarConnection(calendarIDs: model.selectedCalendarIDs,
+                        calendarNames: model.calendars.filter { model.selectedCalendarIDs.contains($0.id) }.map(\.title),
+                        weekStart: model.week.start, timeZoneID: model.week.timeZone.identifier,
+                        managedEntryKeys: Set(selectedEntries.compactMap(\.calendarSourceKey)), includeWeekTitle: includeWeekTitle)
+                    onImport(selectedEntries, replace, includeWeekTitle ? model.week.label : nil, connection)
                     dismiss()
                 }.buttonStyle(StudioButtonStyle(primary: true)).disabled(!canImport)
                     .accessibilityIdentifier("apply-calendar-events")
             }
-            Text("선택한 주의 일정을 복사합니다. 캘린더 변경 사항은 다시 가져온 뒤 반영해주세요.")
-                .font(.system(size: 10)).foregroundStyle(StudioStyle.muted)
+            Text(model.isEmptySnapshot
+                 ? (replace ? "기존 시간표를 비우고 선택한 캘린더에 연결합니다. 연결 후 자동 교체 옵션을 켤 수 있습니다."
+                            : "기존 시간표를 유지하고 선택한 캘린더에 연결합니다. 연결 후 자동 교체 옵션을 켤 수 있습니다.")
+                 : "선택한 주의 일정을 반영합니다. 연결 후 자동 교체 옵션을 켜면 이번 주 변경 사항과 새 주를 자동으로 가져옵니다.")
+                .font(.system(size: 10)).foregroundStyle(StudioStyle.muted).fixedSize(horizontal: false, vertical: true)
         }
     }
 

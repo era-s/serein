@@ -59,4 +59,6 @@ struct WallpaperConfiguration: Codable, Equatable, Sendable {
     var showTexture: Bool = true
     var startHour: Int = 9
     var endHour: Int = 18
+    /// Explicit render input, 0=Monday ... 6=Sunday. Never read the clock in the renderer.
+    var highlightedDay: Int? = nil
 }

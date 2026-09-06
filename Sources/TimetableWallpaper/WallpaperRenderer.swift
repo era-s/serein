@@ -61,6 +61,8 @@ enum WallpaperRenderer {
     }
 
     private static func stableOrder(_ lhs: ScheduleEntry, _ rhs: ScheduleEntry) -> Bool {
+        // Resolve overlaps using every painted event field. UUIDs and calendar source
+        // identifiers cannot change lane placement; entries tied here look identical.
         if lhs.day != rhs.day { return lhs.day < rhs.day }
         if lhs.startMinutes != rhs.startMinutes { return lhs.startMinutes < rhs.startMinutes }
         if lhs.endMinutes != rhs.endMinutes { return lhs.endMinutes < rhs.endMinutes }
@@ -240,7 +242,9 @@ enum WallpaperRenderer {
         }
 
         private func timetable(entries: [ScheduleEntry], frame: CGRect, dividerY: CGFloat) {
-            let dayCount = configuration.showWeekends || entries.contains(where: { $0.day >= 5 }) ? 7 : 5
+            let highlightedDay = configuration.highlightedDay.flatMap { (0...6).contains($0) ? $0 : nil }
+            let highlightsWeekend = highlightedDay.map { $0 >= 5 } ?? false
+            let dayCount = configuration.showWeekends || highlightsWeekend || entries.contains(where: { $0.day >= 5 }) ? 7 : 5
             var firstHour = min(23, max(0, configuration.startHour))
             var lastHour = min(24, max(firstHour + 1, configuration.endHour))
             if let first = entries.map(\.startMinutes).min() { firstHour = min(firstHour, first / 60) }
@@ -250,6 +254,13 @@ enum WallpaperRenderer {
             let dayWidth = grid.width / CGFloat(dayCount)
             let hourHeight = grid.height / CGFloat(lastHour - firstHour)
             let minuteHeight = hourHeight / 60
+            let highlightedColumn = highlightedDay.map { day in
+                CGRect(x: grid.minX + CGFloat(day) * dayWidth + 1.5, y: dividerY + 16,
+                       width: dayWidth - 3, height: grid.maxY - dividerY - 16)
+            }
+            if let column = highlightedColumn {
+                fill(column, color: ink.withAlphaComponent(0.03))
+            }
 
             text("HOUR", in: CGRect(x: frame.minX + 9, y: dividerY + 26, width: 47, height: 12),
                  font: mono(7.5), color: ink.withAlphaComponent(0.52))
@@ -257,8 +268,13 @@ enum WallpaperRenderer {
                 let dayX = grid.minX + CGFloat(day) * dayWidth
                 text(ScheduleEntry.dayLabels[day], in: CGRect(x: dayX + 11, y: dividerY + 25, width: dayWidth - 22, height: 22),
                      font: mono(12), color: ink.withAlphaComponent(0.93), tracking: 2.2)
-                text(String(format: "%02d", day + 1), in: CGRect(x: dayX + dayWidth - 49, y: dividerY + 27, width: 35, height: 15),
-                     font: mono(9), color: ink.withAlphaComponent(0.43), alignment: .right)
+                if day == highlightedDay {
+                    text("TODAY", in: CGRect(x: dayX + dayWidth - 64, y: dividerY + 28, width: 50, height: 14),
+                         font: mono(8), color: ink.withAlphaComponent(0.84), alignment: .right, tracking: 1.1)
+                } else {
+                    text(String(format: "%02d", day + 1), in: CGRect(x: dayX + dayWidth - 49, y: dividerY + 27, width: 35, height: 15),
+                         font: mono(9), color: ink.withAlphaComponent(0.43), alignment: .right)
+                }
             }
 
             for halfHour in 0...((lastHour - firstHour) * 2) {
@@ -286,6 +302,9 @@ enum WallpaperRenderer {
                                        height: max(2, CGFloat(item.entry.endMinutes - item.entry.startMinutes) * minuteHeight - 4))
                     course(item.entry, in: event)
                 }
+            }
+            if let column = highlightedColumn {
+                stroke(column, color: ink.withAlphaComponent(0.62), width: 1)
             }
 
             if entries.isEmpty {

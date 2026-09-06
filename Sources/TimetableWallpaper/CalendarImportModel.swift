@@ -28,10 +28,14 @@ final class CalendarImportModel: ObservableObject {
     }
 
     var week: CalendarWeek { CalendarWeek(containing: selectedDate, timeZone: timeZone) }
+    /// A successfully read week with no timed entries can still establish a
+    /// calendar connection. Deselecting fetched entries is a different action.
+    var isEmptySnapshot: Bool { result != nil && reviewEntries.isEmpty }
     var canImport: Bool {
-        !isLoading && result != nil && confirmed && !selectedEntryIDs.isEmpty && access == .authorized &&
-        reviewEntries.contains(where: { selectedEntryIDs.contains($0.id) }) &&
-        reviewEntries.filter { selectedEntryIDs.contains($0.id) }.allSatisfy { $0.validationError == nil }
+        guard !isLoading, result != nil, confirmed, access == .authorized,
+              !selectedCalendarIDs.isEmpty else { return false }
+        let selected = reviewEntries.filter { selectedEntryIDs.contains($0.id) }
+        return isEmptySnapshot || (!selected.isEmpty && selected.allSatisfy { $0.validationError == nil })
     }
 
     func invalidateResult() {

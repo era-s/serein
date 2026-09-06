@@ -47,6 +47,40 @@ final class RendererTests: XCTestCase {
         XCTAssertEqual(automatic, configured)
     }
 
+    func testTodayIndicatorIsAnExplicitDeterministicRenderInput() throws {
+        let original = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: .init(), size: previewSize)
+        var configuration = WallpaperConfiguration()
+        configuration.highlightedDay = 2
+        let wednesday = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration, size: previewSize)
+        XCTAssertNotEqual(original, wednesday)
+        XCTAssertEqual(wednesday, try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration, size: previewSize))
+        configuration.highlightedDay = 3
+        XCTAssertNotEqual(wednesday, try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration, size: previewSize))
+        configuration.highlightedDay = nil
+        XCTAssertEqual(original, try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration, size: previewSize))
+    }
+
+    func testInvalidHighlightedDaysLeaveTheImageUnchanged() throws {
+        let original = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: .init(), size: previewSize)
+        for day in [-1, 7, Int.max] {
+            var configuration = WallpaperConfiguration()
+            configuration.highlightedDay = day
+            XCTAssertEqual(original, try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration, size: previewSize))
+        }
+    }
+
+    func testWeekendHighlightExpandsGridEvenWithoutWeekendEvents() throws {
+        for day in [5, 6] {
+            var configuration = WallpaperConfiguration()
+            configuration.highlightedDay = day
+            let automatic = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration, size: previewSize)
+            configuration.showWeekends = true
+            XCTAssertEqual(automatic, try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration, size: previewSize))
+            configuration.highlightedDay = nil
+            XCTAssertNotEqual(automatic, try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration, size: previewSize))
+        }
+    }
+
     func testEarlyMorningAutomaticallyExpandsVisibleGrid() throws {
         let entries = [ScheduleEntry(name: "First light", day: 0, startMinutes: 0, endMinutes: 30)]
         let automatic = try WallpaperRenderer.pngData(entries: entries, configuration: .init(), size: previewSize)

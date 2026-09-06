@@ -13,6 +13,28 @@ enum RendererVerification {
         print("PASS: \(message)")
     }
 
+    private static func changedPixelBounds(_ first: Data, _ second: Data) -> CGRect? {
+        guard let lhs = NSBitmapImageRep(data: first), let rhs = NSBitmapImageRep(data: second),
+              lhs.pixelsWide == rhs.pixelsWide, lhs.pixelsHigh == rhs.pixelsHigh,
+              lhs.bitsPerPixel == rhs.bitsPerPixel, lhs.bitsPerSample == 8,
+              let left = lhs.bitmapData, let right = rhs.bitmapData else {
+            fatalError("Unable to compare rendered pixel data")
+        }
+        let bytesPerPixel = lhs.bitsPerPixel / 8
+        var minX = lhs.pixelsWide, minY = lhs.pixelsHigh, maxX = -1, maxY = -1
+        for y in 0..<lhs.pixelsHigh {
+            for x in 0..<lhs.pixelsWide {
+                let leftOffset = y * lhs.bytesPerRow + x * bytesPerPixel
+                let rightOffset = y * rhs.bytesPerRow + x * bytesPerPixel
+                if (0..<bytesPerPixel).contains(where: { left[leftOffset + $0] != right[rightOffset + $0] }) {
+                    minX = min(minX, x); maxX = max(maxX, x)
+                    minY = min(minY, y); maxY = max(maxY, y)
+                }
+            }
+        }
+        return maxX < 0 ? nil : CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+    }
+
     static func main() throws {
         let size = CGSize(width: 756, height: 491)
         let original = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: .init(), size: size)
@@ -25,6 +47,55 @@ enum RendererVerification {
         let equivalent = try WallpaperRenderer.pngData(entries: reordered, configuration: .init(), size: size)
         expect(original == repeated, "Identical inputs produce identical PNG bytes")
         expect(original == equivalent, "Entry order and UUID changes do not affect the wallpaper")
+        let tiedEvents = [
+            ScheduleEntry(name: "Design lab", day: 0, startMinutes: 600, endMinutes: 780, location: "Room B", calendarSourceKey: "calendar-a"),
+            ScheduleEntry(name: "Design lab", day: 0, startMinutes: 600, endMinutes: 780, location: "Room A", calendarSourceKey: "calendar-b"),
+            ScheduleEntry(name: "Design lab", day: 0, startMinutes: 600, endMinutes: 780, location: "Room A", calendarSourceKey: "calendar-c")
+        ]
+        let permutedTies = tiedEvents.reversed().map { entry in
+            var copy = entry
+            copy.id = UUID()
+            copy.calendarSourceKey = "changed-source-\(entry.id)"
+            return copy
+        }
+        let tiedPNG = try WallpaperRenderer.pngData(entries: tiedEvents, configuration: .init(), size: size)
+        let permutedPNG = try WallpaperRenderer.pngData(entries: permutedTies, configuration: .init(), size: size)
+        expect(tiedPNG == permutedPNG, "Same-time, same-title overlaps and exact duplicates ignore order, UUIDs, and calendar source keys")
+
+        var todayConfiguration = WallpaperConfiguration()
+        todayConfiguration.highlightedDay = 2 // Wednesday is an explicit, stable render input.
+        let wednesday = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: todayConfiguration, size: size)
+        let repeatedWednesday = try WallpaperRenderer.pngData(entries: reordered, configuration: todayConfiguration, size: size)
+        expect(wednesday == repeatedWednesday, "Today's indicator is deterministic and independent of UUID or entry order")
+        expect(wednesday != original, "Enabling today's indicator changes the wallpaper")
+        guard let changed = changedPixelBounds(original, wednesday) else { fatalError("Today's indicator changed no pixels") }
+        // At the 756px preview size, Wednesday occupies x=324.5...450.
+        // The difference must stay inside that column, beneath the editorial header.
+        expect(changed.minX >= 324 && changed.maxX <= 451 && changed.minY >= 175,
+               "Wednesday's indicator affects only the Wednesday timetable column")
+        expect(changed.height > 200, "Today's border spans the timetable rather than only changing a label")
+        todayConfiguration.highlightedDay = 3
+        let thursday = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: todayConfiguration, size: size)
+        expect(thursday != wednesday && thursday != original, "A different highlighted day produces a different wallpaper")
+        todayConfiguration.highlightedDay = nil
+        let disabled = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: todayConfiguration, size: size)
+        expect(disabled == original, "Disabling today's indicator restores the original wallpaper exactly")
+        for invalidDay in [-1, 7, Int.max] {
+            todayConfiguration.highlightedDay = invalidDay
+            let invalidHighlight = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: todayConfiguration, size: size)
+            expect(invalidHighlight == original, "Out-of-range highlighted day \(invalidDay) is safely ignored")
+        }
+        for weekendDay in [5, 6] {
+            todayConfiguration.highlightedDay = weekendDay
+            todayConfiguration.showWeekends = false
+            let automaticWeekend = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: todayConfiguration, size: size)
+            todayConfiguration.showWeekends = true
+            let explicitWeekend = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: todayConfiguration, size: size)
+            expect(automaticWeekend == explicitWeekend, "Highlighting \(ScheduleEntry.dayLabels[weekendDay]) includes the weekend without weekend events")
+            todayConfiguration.highlightedDay = nil
+            let unmarkedWeekend = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: todayConfiguration, size: size)
+            expect(automaticWeekend != unmarkedWeekend, "\(ScheduleEntry.dayLabels[weekendDay]) receives a visible today indicator")
+        }
 
         guard let source = CGImageSourceCreateWithData(original as CFData, nil),
               let bitmap = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
@@ -103,6 +174,10 @@ enum RendererVerification {
             ]
             let stress = try WallpaperRenderer.pngData(entries: stressEntries, configuration: .init(), size: CGSize(width: 1512, height: 982))
             try stress.write(to: directory.appendingPathComponent("overlap-and-short-classes.png"))
+            var today = WallpaperConfiguration()
+            today.highlightedDay = 2
+            let todayPNG = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: today)
+            try todayPNG.write(to: directory.appendingPathComponent("today-indicator-demo.png"))
             print("Review images saved to \(directory.path)")
         }
         print("Renderer verification completed: \(checks) checks passed.")

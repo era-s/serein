@@ -53,14 +53,17 @@ struct StudioView: View {
             }
         }
         .sheet(isPresented: $store.showCalendarImport) {
-            let isDemo = CommandLine.arguments.contains("--calendar-demo")
+            let isDemo = store.isDemo
             let model = isDemo
                 ? CalendarImportModel(provider: DemoCalendarProvider(), date: DemoCalendarProvider.anchor,
                                       isDemo: true, timeZone: TimeZone(identifier: "Asia/Seoul")!)
                 : CalendarImportModel()
-            CalendarImportView(model: model, existingEntries: store.entries) { incoming, replace, subtitle in
-                store.importCalendarEntries(incoming, replace: replace, subtitle: subtitle)
+            CalendarImportView(model: model, existingEntries: store.entries) { incoming, replace, subtitle, connection in
+                store.importCalendarEntries(incoming, replace: replace, subtitle: subtitle, connection: connection)
             }
+        }
+        .sheet(isPresented: $store.showAutomation) {
+            AutomationSettingsView().environmentObject(store)
         }
         .alert("작업을 완료하지 못했습니다", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("확인", role: .cancel) { store.error = nil }
@@ -97,6 +100,12 @@ struct StudioView: View {
             Rectangle().fill(StudioStyle.line).frame(width: 1, height: 20).padding(.horizontal, 9)
             Text("A LITTLE SPACE FOR YOUR TIME").font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(1.8).foregroundStyle(StudioStyle.muted)
             Spacer()
+            Button { store.showAutomation = true } label: {
+                Label("자동화", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 11, weight: .medium)).padding(.horizontal, 13).padding(.vertical, 9)
+                    .background(StudioStyle.paper, in: Capsule())
+            }.buttonStyle(.plain).foregroundStyle(StudioStyle.accent).accessibilityIdentifier("open-automation")
+            Rectangle().fill(StudioStyle.line).frame(width: 1, height: 20).padding(.horizontal, 6)
             Image(systemName: "lock.shield").font(.system(size: 11))
             Text("온전히, 내 Mac 안에서").font(.system(size: 11))
         }
@@ -117,7 +126,7 @@ struct StudioView: View {
                 Circle().fill(Color(hex: 0x78916D)).frame(width: 5, height: 5)
                 Text("기기에 자동 저장됩니다").font(.system(size: 10))
                 Spacer()
-                Text("V.02").font(.system(size: 9, design: .monospaced))
+                Text("V.03").font(.system(size: 9, design: .monospaced))
             }.foregroundStyle(StudioStyle.muted).padding(22)
         }.background(StudioStyle.sidebar)
     }
