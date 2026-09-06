@@ -1,0 +1,9 @@
+.build/
+dist/
+.DS_Store
+.swiftpm/
+*.xcuserstate
+.env
+.env.*
+!.env.example
+artifacts/tmp/
