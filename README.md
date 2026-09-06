@@ -2,7 +2,7 @@
 
 시간표를 매일 보고 싶은 Mac 배경화면으로. **이미지·직접 입력·캘린더 → 확인·수정 → 결정론적 렌더링 → PNG 저장 / 배경화면 적용**으로 이어지는 네이티브 macOS 앱입니다.
 
-![Serein native app](artifacts/studio.png)
+![Serein native app](artifacts/studio-v02.png)
 
 ## 실행
 
@@ -35,6 +35,8 @@ open dist/Serein.app
 
 **Google 계정이 목록에 없으면:** 시스템 설정 → 인터넷 계정 → Google에서 로그인하고 **캘린더**를 켭니다. Apple 캘린더 앱에 일정이 나타난 뒤 Serein의 목록 새로고침을 누릅니다. [Google 공식 Mac 연결 안내](https://support.google.com/calendar/answer/99358?co=GENIE.Platform%3DDesktop&hl=ko)를 참고하세요. iCloud 계정도 Mac에서 캘린더 동기화가 켜져 있어야 합니다.
 
+[연결 시작 화면](artifacts/calendar-connect.png) · [예시 계정으로 검증한 가져오기 화면](artifacts/calendar-review-demo.png) · [예시 일정으로 만든 배경화면](artifacts/calendar-wallpaper-demo.png)
+
 - 반복 일정은 선택한 주의 실제 회차로 가져옵니다. 자정을 넘는 일정은 날짜별로 나눕니다. 종일 일정·취소·참석 거절 등 제외 항목의 개수를 안내합니다.
 - ‘기존 시간표를 이 일정으로 교체’를 끄면 기존 시간표에 병합합니다. 같은 출처의 일정은 갱신하므로 동일 일정을 다시 가져와도 중복되지 않습니다. 원본에서 삭제되거나 다른 날짜로 이동한 일정까지 기존 시간표에 맞추려면 **교체**를 사용하세요.
 - 가져오기는 해당 주의 복사본입니다. 클라우드 동기화는 macOS 계정 설정을 따르며, 배경화면을 자동으로 갱신하지 않습니다. 캘린더 변경 후 다시 가져와 반영합니다.
@@ -65,6 +67,8 @@ dist/Serein.app/Contents/MacOS/Serein --render-demo artifacts
 ```
 
 캘린더 연결 화면을 개인 일정 접근 없이 확인하려면 실행 중인 Serein을 종료한 뒤 `open dist/Serein.app --args --calendar-demo`로 실행합니다. 명시적으로 예시 배지를 표시하고, 실제 계정을 읽거나 저장된 시간표를 덮어쓰지 않습니다. 일반 실행은 실제 연결 화면을 제공합니다.
+
+캘린더 변환·권한·비동기 상태 검증 73개는 합성 데이터와 테스트 provider로 수행했습니다. 실제 계정의 EventKit 조회는 사용자가 macOS 권한을 허용한 뒤 확인해야 합니다. UI에서는 예시 캘린더 조회·수정·반영·3024×1964 PNG 저장을 검증했습니다.
 
 - [Ember](artifacts/serein-ember.png) · [Moss](artifacts/serein-moss.png) · [Midnight](artifacts/serein-midnight.png)
 - [실제 OCR 검증 이미지](artifacts/ocr-fixture.png) · [인식 결과](artifacts/ocr-fixture.txt)

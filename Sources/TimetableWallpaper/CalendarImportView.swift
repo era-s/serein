@@ -78,7 +78,8 @@ struct CalendarImportView: View {
     }
 
     private var sourcePanel: some View {
-        ScrollView {
+        VStack(spacing: 12) {
+          ScrollView {
             VStack(alignment: .leading, spacing: 19) {
                 HStack {
                     sectionLabel("01", "가져올 캘린더")
@@ -109,14 +110,15 @@ struct CalendarImportView: View {
                             .font(.system(size: 9)).foregroundStyle(StudioStyle.muted).fixedSize(horizontal: false, vertical: true)
                     }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
                         .background(StudioStyle.paper, in: RoundedRectangle(cornerRadius: 7))
-                    Button { Task { await model.fetchEvents() } } label: {
-                        Label(model.result == nil ? "이 주의 일정 가져오기" : "이 주의 일정 새로고침", systemImage: "arrow.down.to.line")
-                            .frame(maxWidth: .infinity)
-                    }.buttonStyle(StudioButtonStyle(primary: true))
-                        .disabled(model.access != .authorized || model.selectedCalendarIDs.isEmpty || model.isLoading)
-                        .accessibilityIdentifier("fetch-calendar-events")
                 }
             }.padding(.trailing, 2)
+          }
+          Button { Task { await model.fetchEvents() } } label: {
+              Label(model.result == nil ? "이 주의 일정 가져오기" : "이 주의 일정 새로고침", systemImage: "arrow.down.to.line")
+                  .frame(maxWidth: .infinity)
+          }.buttonStyle(StudioButtonStyle(primary: true))
+              .disabled(model.access != .authorized || model.selectedCalendarIDs.isEmpty || model.isLoading)
+              .accessibilityIdentifier("fetch-calendar-events")
         }
     }
 
@@ -242,12 +244,6 @@ struct CalendarImportView: View {
                                 Button("선택 해제") { model.selectedEntryIDs = []; model.confirmed = false }
                             }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(StudioStyle.accent).padding(.bottom, 3)
                             ForEach(model.reviewEntries) { entry in entryRow(entry) }
-                        }
-                        if result.allDayCount > 0 {
-                            notice("종일 일정 \(result.allDayCount)개는 시간 블록에서 제외했습니다.", symbol: "sun.max")
-                        }
-                        if result.excludedCount > 0 {
-                            notice("취소·거절되었거나 가져올 수 없는 일정 \(result.excludedCount)개를 제외했습니다.", symbol: "minus.circle")
                         }
                         ForEach(Array(result.warnings.enumerated()), id: \.offset) { _, warning in
                             notice(warning, symbol: "info.circle")
