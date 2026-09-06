@@ -54,6 +54,7 @@ final class AppStore: ObservableObject {
     }
 
     init() {
+        var migratedWallpaperScope = false
         if isDemo {
             autosaveEnabled = false
             if CommandLine.arguments.contains("--automation-demo") {
@@ -72,8 +73,9 @@ final class AppStore: ObservableObject {
         let url = Self.supportDirectory.appendingPathComponent("studio.json")
         if FileManager.default.fileExists(atPath: url.path) {
             do {
-                let saved = try JSONDecoder().decode(SavedStudio.self, from: Data(contentsOf: url))
+                var saved = try JSONDecoder().decode(SavedStudio.self, from: Data(contentsOf: url))
                 guard saved.isValid else { throw CocoaError(.fileReadCorruptFile) }
+                migratedWallpaperScope = saved.migrateWallpaperScope()
                 entries = saved.entries
                 configuration = saved.configuration
                 configuration.highlightedDay = nil
@@ -92,7 +94,12 @@ final class AppStore: ObservableObject {
             }
         }
         loading = false
-        startAutomation()
+        startAutomation(initialTrigger: migratedWallpaperScope && automationSettings.hasAutomation ? .settingsChanged : .launch)
+        if migratedWallpaperScope {
+            committingAutomation = true
+            changed()
+            committingAutomation = false
+        }
         refreshPreview()
     }
 
@@ -204,8 +211,7 @@ final class AppStore: ObservableObject {
     }
 
     func applyWallpaper() {
-        let target = automationSettings.targetDisplayID ?? currentDisplay?.id
-        guard let target else { error = "배경화면을 적용할 디스플레이를 찾을 수 없습니다."; return }
+        let target = automationSettings.targetDisplayID ?? WallpaperDisplay.allSpacesID
         isExporting = true
         defer { isExporting = false }
         do {
@@ -225,7 +231,10 @@ final class AppStore: ObservableObject {
                 dayKey: WallpaperAutomation.dayKey(now: now, timeZone: .current), targetDisplayID: target)
             loading = false
             changed()
-            message = isDemo ? "예시 PNG를 만들었습니다. 실제 배경화면은 변경하지 않습니다." : "선택한 디스플레이의 배경화면을 설정했습니다."
+            message = isDemo ? "예시 PNG를 만들었습니다. 실제 배경화면은 변경하지 않습니다."
+                : target == WallpaperDisplay.allSpacesID
+                    ? "모든 데스크탑과 디스플레이의 배경화면을 설정했습니다."
+                    : "선택한 디스플레이의 현재 데스크탑 배경화면을 설정했습니다."
         } catch { self.error = "배경화면을 설정하지 못했습니다. \(error.localizedDescription)" }
     }
 
@@ -237,19 +246,12 @@ final class AppStore: ObservableObject {
         AutomationContext(entries: entries, configuration: configuration, settings: automationSettings,
                           connection: calendarConnection, receipt: automationReceipt)
     }
-    private var currentDisplay: WallpaperDisplay? {
-        if isDemo { return displays.first }
-        guard let screen = NSApp.keyWindow?.screen ?? NSScreen.main,
-              let id = WallpaperDesktopService.identifier(for: screen) else { return displays.first }
-        return displays.first { $0.id == id }
-    }
-
     private func automationOptionsChanged(_ old: AutomationSettings) {
         guard !loading else { return }
-        if automationSettings.hasAutomation && automationSettings.targetDisplayID == nil, let display = currentDisplay {
+        if automationSettings.hasAutomation && automationSettings.targetDisplayID == nil {
             loading = true
-            automationSettings.targetDisplayID = display.id
-            automationSettings.targetDisplayName = display.name
+            automationSettings.targetDisplayID = WallpaperDisplay.allSpacesID
+            automationSettings.targetDisplayName = WallpaperDisplay.allSpaces.name
             loading = false
         }
         changed()
@@ -270,20 +272,25 @@ final class AppStore: ObservableObject {
         committingAutomation = false
     }
     func refreshDisplays() {
-        displays = isDemo ? [WallpaperDisplay(id: "demo-display", name: "예시 MacBook Pro")]
-                          : WallpaperDesktopService.displays
+        let individualDisplays = isDemo ? [WallpaperDisplay(id: "demo-display", name: "예시 MacBook Pro")]
+                                        : WallpaperDesktopService.displays
+        displays = [.allSpaces] + individualDisplays
     }
     func selectDisplay(_ id: String) {
         var settings = automationSettings
-        settings.targetDisplayID = id.isEmpty ? nil : id
-        settings.targetDisplayName = displays.first { $0.id == id }?.name
+        let target = id.isEmpty ? WallpaperDisplay.allSpacesID : id
+        settings.targetDisplayID = target
+        settings.targetDisplayName = displays.first { $0.id == target }?.name
         automationSettings = settings
     }
     func checkNow() { scheduleCheck(.manual, delay: 0) }
     private func scheduleCheck(_ trigger: AutomationTrigger, delay: Double) {
         checkTask?.cancel()
-        // Preserve explicit enable intent if a timer/event arrives during debounce.
-        let selectedTrigger: AutomationTrigger = scheduledTrigger == .enabled ? .enabled : trigger
+        // Explicit enable/scope changes must survive timer events during debounce.
+        let selectedTrigger: AutomationTrigger
+        if scheduledTrigger == .enabled || trigger == .enabled { selectedTrigger = .enabled }
+        else if scheduledTrigger == .settingsChanged { selectedTrigger = .settingsChanged }
+        else { selectedTrigger = trigger }
         scheduledTrigger = selectedTrigger
         checkTask = Task { [weak self] in
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
@@ -293,7 +300,7 @@ final class AppStore: ObservableObject {
             self.refreshPreview()
         }
     }
-    private func startAutomation() {
+    private func startAutomation(initialTrigger: AutomationTrigger = .launch) {
         refreshDisplays()
         refreshLoginStatus()
         automation.configure(automationContext)
@@ -323,7 +330,7 @@ final class AppStore: ObservableObject {
             self?.refreshDisplays()
             self?.scheduleCheck(.wake, delay: 0.5)
         }.store(in: &observers)
-        scheduleCheck(.launch, delay: 0.5)
+        scheduleCheck(initialTrigger, delay: 0.5)
     }
     func refreshLoginStatus() {
         guard !isDemo else { return }

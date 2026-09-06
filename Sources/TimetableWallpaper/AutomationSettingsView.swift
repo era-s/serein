@@ -56,16 +56,21 @@ struct AutomationSettingsView: View {
                     }
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
-                        caption("YOUR DISPLAY")
-                        Picker("적용할 디스플레이", selection: Binding(
-                            get: { store.automationSettings.targetDisplayID ?? "" }, set: { store.selectDisplay($0) })) {
-                            Text("디스플레이 선택").tag("")
-                            ForEach(store.displays) { Text($0.name).tag($0.id) }
+                        caption("APPLY TO")
+                        Text("배경화면 적용 범위").font(.system(size: 11, weight: .medium))
+                        Picker("배경화면 적용 범위", selection: Binding(
+                            get: { store.automationSettings.targetDisplayID ?? WallpaperDisplay.allSpacesID }, set: { store.selectDisplay($0) })) {
+                            ForEach(store.displays) { display in
+                                Text(display.id == WallpaperDisplay.allSpacesID ? display.name : "\(display.name) · 현재 데스크탑만")
+                                    .tag(display.id)
+                            }
                             if let id = store.automationSettings.targetDisplayID, !store.displays.contains(where: { $0.id == id }) {
                                 Text("\(store.automationSettings.targetDisplayName ?? "저장한 디스플레이") · 연결 끊김").tag(id)
                             }
-                        }.labelsHidden().accessibilityLabel("적용할 디스플레이")
-                        Text("연결이 끊기면 해당 화면이 돌아올 때까지 교체를 기다립니다.")
+                        }.labelsHidden().accessibilityLabel("배경화면 적용 범위")
+                        Text(store.automationSettings.targetDisplayID == WallpaperDisplay.allSpacesID
+                             ? "데스크탑 1·2를 포함한 모든 Spaces와 디스플레이에 같은 배경화면을 적용합니다."
+                             : "선택한 디스플레이의 현재 데스크탑만 변경합니다. 연결이 끊기면 해당 화면이 돌아올 때까지 기다립니다.")
                             .font(.system(size: 10)).foregroundStyle(StudioStyle.muted).lineSpacing(3)
                     }
                     Divider()

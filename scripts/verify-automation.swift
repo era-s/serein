@@ -164,6 +164,14 @@ enum AutomationVerification {
                "The actual saved-studio model still loads and validates a version 1 project")
         expect(old.automation == nil && old.connection == nil && old.receipt == nil && old.configuration.highlightedDay == nil,
                "A version 1 project has no implicit automation opt-in, calendar connection or application receipt")
+        var migratedLegacy = old
+        expect(migratedLegacy.migrateWallpaperScope() && migratedLegacy.version == 3 && migratedLegacy.isValid,
+               "Version 1 projects migrate to the current saved-studio version")
+        expect(migratedLegacy.automation?.targetDisplayID == WallpaperDisplay.allSpacesID
+               && migratedLegacy.automation?.hasAutomation == false && migratedLegacy.entries == old.entries,
+               "Legacy projects default to every Space and display without enabling automation or changing entries")
+        expect(AutomationSettings().targetDisplayID == WallpaperDisplay.allSpacesID,
+               "New projects use all Spaces and displays as the default application scope")
 
         var ctx = context(changes: true, weekly: true, today: true)
         let week = CalendarWeek(containing: wednesday, timeZone: seoul)
@@ -176,11 +184,25 @@ enum AutomationVerification {
         let saved = SavedStudio(entries: ctx.entries, configuration: ctx.configuration,
                                 automation: ctx.settings, connection: ctx.connection, receipt: receipt)
         let restored = try JSONDecoder().decode(SavedStudio.self, from: JSONEncoder().encode(saved))
-        expect(restored.version == 2 && restored.isValid && restored.entries == ctx.entries && restored.configuration == ctx.configuration,
-               "A version 2 saved studio preserves valid entries and the deterministic render configuration")
+        expect(restored.version == 3 && restored.isValid && restored.entries == ctx.entries && restored.configuration == ctx.configuration,
+               "A version 3 saved studio preserves valid entries and the deterministic render configuration")
         expect(restored.automation == ctx.settings && restored.connection == ctx.connection && restored.receipt == receipt,
-               "A version 2 saved studio preserves every automation switch, selected source, managed identity and receipt")
-        for version in [0, 3, 99] {
+               "A version 3 saved studio preserves every automation switch, selected source, managed identity and receipt")
+        var migrated = saved
+        migrated.version = 2
+        expect(migrated.isValid && migrated.migrateWallpaperScope() && migrated.version == 3,
+               "A valid version 2 saved studio migrates to version 3")
+        expect(migrated.automation?.targetDisplayID == WallpaperDisplay.allSpacesID
+               && migrated.automation?.targetDisplayName == WallpaperDisplay.allSpaces.name
+               && migrated.automation?.refreshOnCalendarChange == ctx.settings.refreshOnCalendarChange
+               && migrated.automation?.refreshWeekly == ctx.settings.refreshWeekly
+               && migrated.automation?.showToday == ctx.settings.showToday
+               && migrated.connection == saved.connection && migrated.receipt == receipt,
+               "Scope migration changes only the target and preserves opt-ins, calendar ownership and the last actual receipt")
+        var unchanged = saved
+        expect(!unchanged.migrateWallpaperScope() && unchanged.automation?.targetDisplayID == "synthetic-display",
+               "Explicit individual-display selections saved in version 3 are not migrated again")
+        for version in [0, 4, 99] {
             var unsupported = saved; unsupported.version = version
             let decoded = try JSONDecoder().decode(SavedStudio.self, from: JSONEncoder().encode(unsupported))
             expect(!decoded.isValid, "Saved-studio validation rejects unsupported version \(version)")
@@ -189,6 +211,26 @@ enum AutomationVerification {
         expect(!invalidSource.isValid, "A saved automation connection cannot have an empty calendar selection")
         invalidSource = saved; invalidSource.connection?.timeZoneID = "Invalid/SyntheticZone"
         expect(!invalidSource.isValid, "A saved automation connection cannot have an unknown time zone")
+    }
+
+    private static func checkMigratedScopeRefresh() async {
+        var ctx = context(changes: false, weekly: true)
+        ctx.entries = CalendarEventConverter.convert([event()], week: CalendarWeek(containing: wednesday, timeZone: seoul)).entries
+        ctx.receipt = AutomationReceipt(
+            wallpaperFingerprint: WallpaperAutomation.fingerprint(entries: ctx.entries, configuration: ctx.configuration,
+                targetDisplayID: "synthetic-display"), calendarFingerprint: nil, appliedAt: wednesday,
+            weekStart: ctx.connection?.weekStart, dayKey: WallpaperAutomation.dayKey(now: wednesday, timeZone: seoul),
+            targetDisplayID: "synthetic-display")
+        var legacy = SavedStudio(version: 2, entries: ctx.entries, configuration: ctx.configuration,
+            automation: ctx.settings, connection: ctx.connection, receipt: ctx.receipt)
+        legacy.migrateWallpaperScope()
+        ctx.settings = legacy.automation!
+        let harness = AutomationHarness(ctx)
+        await harness.engine.check(trigger: .settingsChanged, now: wednesday)
+        expect(harness.sink.updates.count == 1
+               && harness.sink.updates.last?.receipt.targetDisplayID == WallpaperDisplay.allSpacesID
+               && harness.sink.updates.last?.entries == ctx.entries && harness.provider.eventRequests.isEmpty,
+               "A migrated weekly-only project reapplies its existing week to every Space without waiting for Monday")
     }
 
     private static func checkWeeklySwitch() async {
@@ -467,6 +509,7 @@ enum AutomationVerification {
     static func main() async throws {
         try checkFingerprintAndDates()
         try checkSavedStudio()
+        await checkMigratedScopeRefresh()
         await checkCurrentWeekRefresh()
         await checkWeeklySwitch()
         await checkMetadataAndLaunchRecovery()

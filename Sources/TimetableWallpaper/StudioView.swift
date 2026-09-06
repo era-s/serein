@@ -124,7 +124,7 @@ struct StudioView: View {
             Spacer(minLength: 0)
             HStack(spacing: 7) {
                 Circle().fill(Color(hex: 0x78916D)).frame(width: 5, height: 5)
-                Text("기기에 자동 저장됩니다").font(.system(size: 10))
+                Text(store.isDemo ? "예시 모드 · 저장되지 않습니다" : "기기에 자동 저장됩니다").font(.system(size: 10))
                 Spacer()
                 Text("V.03").font(.system(size: 9, design: .monospaced))
             }.foregroundStyle(StudioStyle.muted).padding(22)

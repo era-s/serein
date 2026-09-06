@@ -1,7 +1,7 @@
 import Foundation
 
 struct SavedStudio: Codable {
-    var version = 2
+    var version = 3
     var entries: [ScheduleEntry]
     var configuration: WallpaperConfiguration
     var automation: AutomationSettings? = nil
@@ -9,11 +9,25 @@ struct SavedStudio: Codable {
     var receipt: AutomationReceipt? = nil
 
     var isValid: Bool {
-        (1...2).contains(version) && entries.allSatisfy { $0.validationError == nil }
+        (1...3).contains(version) && entries.allSatisfy { $0.validationError == nil }
             && Set(entries.map(\.id)).count == entries.count
             && (0...23).contains(configuration.startHour)
             && (1...24).contains(configuration.endHour)
             && configuration.startHour < configuration.endHour
             && (connection == nil || (!connection!.calendarIDs.isEmpty && TimeZone(identifier: connection!.timeZoneID) != nil))
+    }
+
+    /// Older projects applied to one screen's visible desktop. The requested new
+    /// default covers every Space and display without changing automation opt-ins.
+    /// Keep the old receipt so its narrower scope cannot count as an all-Space apply.
+    @discardableResult
+    mutating func migrateWallpaperScope() -> Bool {
+        guard (1...2).contains(version) else { return false }
+        var settings = automation ?? AutomationSettings()
+        settings.targetDisplayID = WallpaperDisplay.allSpacesID
+        settings.targetDisplayName = WallpaperDisplay.allSpaces.name
+        automation = settings
+        version = 3
+        return true
     }
 }

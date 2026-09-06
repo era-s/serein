@@ -1,0 +1,13 @@
+{
+  "macOS": "26.6",
+  "storedSpaces": 4,
+  "verifiedDesktopSlots": 15,
+  "allSlotsSameWallpaper": true,
+  "screenSaverContentPreserved": true,
+  "existingScheduleAndDesignPreserved": true,
+  "imageMatchesPreviouslyAppliedSpace": true,
+  "savedVersion": 3,
+  "applicationTarget": "serein.all-spaces-and-displays",
+  "localBackupExists": true,
+  "note": "WallpaperAgent updated its own Idle.LastUse timestamp and expanded stored display records after reload; screen-saver choices were unchanged."
+}
