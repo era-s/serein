@@ -13,6 +13,7 @@ final class AppStore: ObservableObject {
     @Published var importImage: NSImage?
     @Published var message: String?
     @Published var error: String?
+    @Published var showCalendarImport = false
     private var renderTask: Task<Void, Never>?
     private var loading = true
     private var autosaveEnabled = true
@@ -28,6 +29,14 @@ final class AppStore: ObservableObject {
     }
 
     init() {
+        if CommandLine.arguments.contains("--calendar-demo") {
+            // The preview fixture never reads or overwrites the user's saved studio.
+            autosaveEnabled = false
+            loading = false
+            showCalendarImport = true
+            refreshPreview()
+            return
+        }
         let url = Self.supportDirectory.appendingPathComponent("studio.json")
         if FileManager.default.fileExists(atPath: url.path) {
             do {
@@ -94,6 +103,17 @@ final class AppStore: ObservableObject {
         else { entries.append(entry) }
     }
     func remove(_ id: UUID) { entries.removeAll { $0.id == id } }
+
+    func importCalendarEntries(_ incoming: [ScheduleEntry], replace: Bool, subtitle: String?) {
+        guard !incoming.isEmpty, incoming.allSatisfy({ $0.validationError == nil }) else {
+            error = "가져올 일정의 이름과 시간을 확인해주세요."
+            return
+        }
+        entries = replace ? incoming : CalendarEntryMerger.merge(existing: entries, incoming: incoming)
+        if let subtitle { configuration.subtitle = subtitle }
+        showCalendarImport = false
+        message = "캘린더 일정 \(incoming.count)개를 반영했습니다."
+    }
 
     func chooseImage() {
         guard !isRecognizing else { return }

@@ -39,6 +39,7 @@ struct WallpaperApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("시간표 이미지 가져오기…", action: store.chooseImage).keyboardShortcut("o")
+                Button("캘린더에서 가져오기…") { store.showCalendarImport = true }.keyboardShortcut("k")
                 Button("PNG 저장…", action: store.exportPNG).keyboardShortcut("s", modifiers: [.command, .shift])
             }
         }

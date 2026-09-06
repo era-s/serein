@@ -8,6 +8,7 @@ struct ScheduleEntry: Identifiable, Codable, Hashable, Sendable {
     var startMinutes: Int
     var endMinutes: Int
     var location: String = ""
+    var calendarSourceKey: String? = nil
 
     var timeLabel: String { "\(Self.time(startMinutes)) – \(Self.time(endMinutes))" }
     static func time(_ minutes: Int) -> String { String(format: "%02d:%02d", minutes / 60, minutes % 60) }

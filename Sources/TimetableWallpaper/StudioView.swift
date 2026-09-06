@@ -52,6 +52,16 @@ struct StudioView: View {
                 }
             }
         }
+        .sheet(isPresented: $store.showCalendarImport) {
+            let isDemo = CommandLine.arguments.contains("--calendar-demo")
+            let model = isDemo
+                ? CalendarImportModel(provider: DemoCalendarProvider(), date: DemoCalendarProvider.anchor,
+                                      isDemo: true, timeZone: TimeZone(identifier: "Asia/Seoul")!)
+                : CalendarImportModel()
+            CalendarImportView(model: model, existingEntries: store.entries) { incoming, replace, subtitle in
+                store.importCalendarEntries(incoming, replace: replace, subtitle: subtitle)
+            }
+        }
         .alert("작업을 완료하지 못했습니다", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("확인", role: .cancel) { store.error = nil }
         } message: { Text(store.error ?? "") }
@@ -107,7 +117,7 @@ struct StudioView: View {
                 Circle().fill(Color(hex: 0x78916D)).frame(width: 5, height: 5)
                 Text("기기에 자동 저장됩니다").font(.system(size: 10))
                 Spacer()
-                Text("V.01").font(.system(size: 9, design: .monospaced))
+                Text("V.02").font(.system(size: 9, design: .monospaced))
             }.foregroundStyle(StudioStyle.muted).padding(22)
         }.background(StudioStyle.sidebar)
     }
@@ -147,8 +157,22 @@ struct StudioView: View {
                 }
                 return true
             }
+            Button { store.showCalendarImport = true } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar.badge.clock").font(.system(size: 19, weight: .light))
+                        .foregroundStyle(StudioStyle.accent)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("캘린더에서 가져오기").font(.system(size: 11, weight: .medium))
+                        Text("Apple Calendar · Google Calendar").font(.system(size: 9)).foregroundStyle(StudioStyle.muted)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.right").font(.system(size: 10)).foregroundStyle(StudioStyle.muted)
+                }.padding(13).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(StudioStyle.paper, in: RoundedRectangle(cornerRadius: 8))
+            }.buttonStyle(.plain).disabled(store.isRecognizing)
+                .padding(.horizontal, 22).padding(.top, 12).accessibilityIdentifier("import-calendar")
             HStack {
-                Text("이번 주 일정").font(.system(size: 12, weight: .semibold))
+                Text("주간 일정").font(.system(size: 12, weight: .semibold))
                 Text(String(store.entries.count)).font(.system(size: 10, design: .monospaced)).foregroundStyle(StudioStyle.muted)
                 Spacer()
                 Button { editingEntry = .init(name: "", day: 0, startMinutes: 540, endMinutes: 600) } label: {
