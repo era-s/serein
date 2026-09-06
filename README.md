@@ -2,7 +2,7 @@
 
 시간표를 매일 보고 싶은 Mac 배경화면으로. **이미지 인식 → 확인·수정 → 결정론적 렌더링 → PNG 저장 / 배경화면 적용**으로 이어지는 네이티브 macOS 앱입니다.
 
-![Serein Ember wallpaper](artifacts/serein-ember.png)
+![Serein native app](artifacts/studio.png)
 
 ## 실행
 
@@ -18,7 +18,7 @@ open dist/Serein.app
 ## 사용법
 
 1. 왼쪽 **시간표 이미지 가져오기**를 누르거나 PNG/JPG/HEIC 이미지를 끌어다 놓습니다. **추가**로 직접 입력할 수도 있습니다.
-2. 인식 결과와 원본을 비교하고 과목을 클릭해 이름·요일·시작/종료 시간·장소를 수정합니다. 확인 체크 후 선택한 일정을 반영합니다.
+2. 인식 결과와 원본을 비교하고 과목을 클릭해 이름·요일·시작/종료 시간·장소를 수정합니다. 원본 이미지는 슬라이더로 최대 3배 확대할 수 있습니다. 확인 체크 후 선택한 일정을 반영합니다.
 3. **디자인**에서 Ember, Moss, Midnight 테마와 문구, 학기 제목, 장소 표시, 주말, 텍스처를 설정합니다.
 4. MacBook 해상도를 선택하고 **PNG 저장** 또는 **배경화면으로 설정**을 누릅니다. 적용 대상은 앱 창이 있는 디스플레이입니다.
 
@@ -49,6 +49,7 @@ dist/Serein.app/Contents/MacOS/Serein --render-demo artifacts
 
 - [Ember](artifacts/serein-ember.png) · [Moss](artifacts/serein-moss.png) · [Midnight](artifacts/serein-midnight.png)
 - [실제 OCR 검증 이미지](artifacts/ocr-fixture.png) · [인식 결과](artifacts/ocr-fixture.txt)
+- [OCR 검토 화면](artifacts/ocr-review.png) · [앱에서 직접 저장한 OCR 결과 배경화면](artifacts/ocr-import-wallpaper.png)
 
 ## 프롬프트와 결과 이력
 

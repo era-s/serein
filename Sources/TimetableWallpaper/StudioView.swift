@@ -355,6 +355,7 @@ struct StudioView: View {
 }
 
 struct StudioButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
     var primary: Bool
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.system(size: 11, weight: .medium))
@@ -362,6 +363,6 @@ struct StudioButtonStyle: ButtonStyle {
             .foregroundStyle(primary ? StudioStyle.sidebar : StudioStyle.ink)
             .background(primary ? StudioStyle.ink.opacity(configuration.isPressed ? 0.8 : 1) : StudioStyle.sidebar, in: RoundedRectangle(cornerRadius: 7))
             .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(primary ? .clear : StudioStyle.line, lineWidth: 1))
-            .opacity(configuration.isPressed ? 0.85 : 1)
+            .opacity(!isEnabled ? 0.38 : (configuration.isPressed ? 0.85 : 1))
     }
 }

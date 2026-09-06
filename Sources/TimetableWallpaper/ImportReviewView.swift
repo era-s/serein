@@ -11,6 +11,7 @@ struct ImportReviewView: View {
     @State private var editingEntry: ScheduleEntry?
     @State private var replace = true
     @State private var confirmed = false
+    @State private var imageZoom = 1.0
 
     init(result: OCRImportResult, sourceImage: NSImage?, onImport: @escaping ([ScheduleEntry], Bool) -> Void) {
         self.result = result
@@ -36,8 +37,14 @@ struct ImportReviewView: View {
                     Text("원본 이미지").font(.system(size: 11, weight: .medium))
                     if let sourceImage {
                         ScrollView([.horizontal, .vertical]) {
-                            Image(nsImage: sourceImage).resizable().scaledToFit().frame(width: 330)
+                            Image(nsImage: sourceImage).resizable().scaledToFit().frame(width: 330 * imageZoom)
                         }.frame(width: 350, height: 370).background(.white, in: RoundedRectangle(cornerRadius: 8))
+                        HStack(spacing: 9) {
+                            Image(systemName: "minus.magnifyingglass")
+                            Slider(value: $imageZoom, in: 1...3).accessibilityLabel("원본 이미지 확대")
+                            Image(systemName: "plus.magnifyingglass")
+                            Text("\(Int(imageZoom * 100))%").font(.system(size: 9, design: .monospaced)).frame(width: 33)
+                        }.font(.system(size: 11)).foregroundStyle(StudioStyle.muted).frame(width: 350)
                     }
                     DisclosureGroup("인식한 텍스트 보기") {
                         ScrollView { Text(result.recognizedText.isEmpty ? "인식한 텍스트가 없습니다." : result.recognizedText).font(.system(size: 10)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(height: 110)
