@@ -78,3 +78,15 @@ git log --all --extended-regexp --grep='^Prompt-ID: P002$' --format='%h %s'
 - 실제 적용: 사용자의 요청에 따라 앱 UI에서 기존 시간표를 적용했다. macOS 26.6의 **4개 Space** 및 서비스가 다시 만든 기본/디스플레이 항목을 포함한 **15개 저장 대상** 모두 같은 기존 PNG를 가리켰다. 원래 시간표와 디자인은 전후 해시가 같았고, 화면 보호기의 Content도 같았다. WallpaperAgent 자체가 갱신한 Idle.LastUse 시각은 달라질 수 있음을 확인했다.
 - 결과 기록: [개인 일정·계정·파일 경로를 제외한 실제 검증 JSON](../artifacts/all-spaces-verification.json). 개인 시간표 PNG, 실제 캘린더 화면 및 시스템 백업은 커밋하지 않았다.
 - 호환성: macOS 14·15의 레거시 형식과 26의 현재 형식을 지원한다. 14·15는 합성 데이터, 26.6은 실제 적용까지 확인했다. 비공개 시스템 저장 형식에 의존하므로 지원하지 않는 버전/형식에는 중단하며, 향후 macOS 변경 시 보완이 필요할 수 있다. 시스템 설정 앱의 UI 읽기가 시간 초과되어 전체 검증은 Serein UI의 성공 표시와 재시작 후 실제 저장 내용으로 수행했다.
+
+
+## M009 · 업데이트 뒤 캘린더 권한 복구 · 2026-09-07
+
+- 프롬프트: [P001](prompts/P001.md), [P002](prompts/P002.md), [P003](prompts/P003.md), [P004](prompts/P004.md), [P005](prompts/P005.md), [P006](prompts/P006.md)
+- 원인: 실제 `tccd` 로그의 `Failed to match existing code requirement`로 이전에 허용한 앱과 현재 ad-hoc 빌드의 CDHash가 달라졌음을 확인했다. 시스템 설정의 켜짐 표시만으로 현재 실행 파일에 유효한 권한임을 보장하지 않는다. [Apple DTS의 안정된 서명 안내](https://developer.apple.com/forums/thread/663889), [Apple의 코드 식별·자체 인증서 문서](https://developer.apple.com/library/archive/technotes/tn2206/_index.html)를 참고했다.
+- 결과: [빌드 서명기](../scripts/sign-app.py)는 저장소 밖 전용 키체인의 지속되는 인증서를 재사용한다. 기본 코드 요구사항을 정확한 번들 ID와 인증서에 묶고, 변조 검증을 수행한다. 시스템 신뢰 루트·TCC DB를 수정하지 않는다. 키체인 검색 목록 추가는 서명 동안에만 적용하며 성공·실패 모두 원상 복구한다. 기존 Apple 개발 인증서 지정도 지원한다. 앱은 0.3.2(빌드 5)이다.
+- 복구 흐름: [명시적 권한 복구 모델](../Sources/TimetableWallpaper/CalendarAccessRecovery.swift)과 [자동화 화면](../Sources/TimetableWallpaper/AutomationSettingsView.swift)에 ‘권한 연결 다시 확인’을 추가했다. 연결 복구와 자동화는 같은 EventKit 서비스를 사용한다. 명시적인 연결 요청만 macOS 권한 확인을 호출하며 백그라운드에서는 호출하지 않는다. 거절·취소·오류·선택 변경 시 기존 일정·선택·옵션·적용 기록을 보존한다.
+- 재시도 수정: [자동화 엔진](../Sources/TimetableWallpaper/WallpaperAutomation.swift)의 ‘지금 확인’이 주간 교체만 켠 같은 주에도 일정을 다시 조회한다. 이전 주의 복사본을 유지하는 옵션과 백그라운드 조회 정책은 존중하며, 명시적 재시도가 뒤늦은 알림에 의해 사라지지 않도록 했다.
+- 검증: `verify-calendar.sh` **85개**, `verify-automation.sh` **94개**, `verify-calendar-recovery.sh` **43개** 통과. `verify-signing.py` **26개** 통과: 서로 다른 실행 파일/버전의 CDHash는 달라도 동일 DR 유지, 다음 빌드가 이전 요구사항 충족, 변조·다른 번들 ID·같은 ID의 ad-hoc 서명 거부, 정상/실패 시 사용자 키체인 검색 목록과 기본 키체인 보존. 시험 앱은 실행하지 않았다. Release 빌드와 엄격한 서명 검증도 통과했다.
+- 실제 UI: 기존 개인 일정 24개와 옵션을 보존하고 수정 앱을 실행했다. 복구 버튼 및 완료 버튼이 화면 안에 표시됨을 확인했다. 복구 클릭으로 `tccd`의 Serein 캘린더 `AUTHREQ_PROMPTING`을 확인했다. 이전 ad-hoc 권한은 새 인증서로 자동 이전할 수 없어 macOS의 허용 확인을 요청했다. 확인 후 권한 오류가 사라지고 이번 주 일정 30개, 마지막 적용 2026-09-07 13:38, ‘이번 주 일정에 변경이 없습니다’ 상태를 실제 UI에서 확인했다. 후속 업데이트 뒤 권한 유지와 전체 Space 저장 결과는 다음 검증에 기록한다.
+- 개인정보: 개인 계정·일정 화면, 서명 개인키·암호, 실제 작업 백업은 저장소 밖에만 보관했다. [원문 P006](prompts/P006.md)과 이 기록에는 개인 계정 및 일정 내용을 넣지 않았다.

@@ -22,8 +22,12 @@ final class SystemCalendarService: CalendarProviding {
 
     /// Only the explicit Connect action should call this method.
     func requestAccess() async throws -> Bool {
-        if access == .authorized { return true }
-        guard access == .notDetermined else { return false }
+        // Explicit requests must reach EventKit even if its preflight reports
+        // denied: a replaced development signature can leave an old TCC record
+        // enabled in Settings but ineligible for this binary. Only macOS can
+        // validate that record or ask the user again. Never synthesize consent.
+        guard access != .restricted else { return false }
+        store.reset()
         let granted = try await store.requestFullAccessToEvents()
         guard granted, access == .authorized else { return false }
         store.reset()

@@ -438,6 +438,68 @@ enum AutomationVerification {
                "Calendar automation without a connection waits for explicit setup without reading calendars")
     }
 
+    private static func checkManualPermissionRecovery() async {
+        let harness = AutomationHarness(context(changes: false, weekly: true))
+        harness.provider.records = [event(title: "Before reconnect")]
+        await harness.engine.check(trigger: .enabled, now: wednesday)
+        harness.acceptLatest()
+        let originalReceipt = harness.context.receipt
+        let originalEntries = harness.context.entries
+        let initialReads = harness.provider.eventRequests.count
+
+        harness.provider.access = .denied
+        await harness.engine.check(trigger: .enabled, now: wednesday.addingTimeInterval(60))
+        expect(harness.engine.needsCalendarReconnect && harness.sink.updates.count == 1
+               && harness.sink.stateChanges.isEmpty && harness.context.receipt == originalReceipt
+               && harness.context.entries == originalEntries && harness.engine.lastAppliedAt == originalReceipt?.appliedAt,
+               "A denied re-enable preserves the existing schedule and receipt and exposes a reconnect action")
+        for trigger: AutomationTrigger in [.clock, .calendarChanged, .wake] {
+            await harness.engine.check(trigger: trigger, now: wednesday.addingTimeInterval(120))
+        }
+        expect(harness.provider.permissionRequests == 0 && harness.provider.eventRequests.count == initialReads,
+               "Background checks after a permission failure neither prompt nor turn weekly-only mode into continuous reads")
+
+        harness.provider.access = .authorized
+        harness.provider.records = [event(title: "After reconnect")]
+        await harness.engine.check(trigger: .manual, now: wednesday.addingTimeInterval(180))
+        expect(harness.provider.eventRequests.count == initialReads + 1 && harness.sink.updates.count == 2
+               && harness.sink.updates.last?.entries.first?.name == "After reconnect" && !harness.engine.needsCalendarReconnect,
+               "Explicit rechecking after permission recovery refreshes a weekly-only wallpaper within the same week")
+        expect(harness.provider.permissionRequests == 0,
+               "The automation engine never requests permission even for an explicit manual recheck")
+        harness.acceptLatest()
+        harness.provider.records = [event(title: "Wait for the next Monday")]
+        await harness.engine.check(trigger: .clock, now: wednesday.addingTimeInterval(240))
+        expect(harness.provider.eventRequests.count == initialReads + 1 && harness.sink.updates.count == 2,
+               "Recovering permission does not change the weekly-only background polling policy")
+
+        for hasReceipt in [false, true] {
+            var past = context(changes: true, weekly: false)
+            past.entries = originalEntries
+            past.receipt = hasReceipt ? originalReceipt : nil
+            let retained = AutomationHarness(past)
+            retained.provider.records = []
+            await retained.engine.check(trigger: .manual, now: monday)
+            expect(retained.provider.eventRequests.isEmpty && retained.sink.updates.isEmpty
+                   && retained.sink.stateChanges.isEmpty,
+                   "Manual rechecking preserves an older displayed week when weekly refresh is off (receipt: \(hasReceipt))")
+        }
+
+        let queued = AutomationHarness(harness.context)
+        queued.provider.suspendEvents = true
+        let manual = Task { await queued.engine.check(trigger: .manual, now: wednesday.addingTimeInterval(300)) }
+        await waitForRequests(1, provider: queued.provider)
+        let notification = Task { await queued.engine.check(trigger: .calendarChanged, now: wednesday.addingTimeInterval(301)) }
+        await Task.yield()
+        queued.provider.completeRequest(0, records: [event(title: "Superseded manual read")])
+        await waitForRequests(2, provider: queued.provider)
+        queued.provider.completeRequest(1, records: [event(title: "Latest manual read")])
+        await manual.value
+        await notification.value
+        expect(queued.sink.updates.count == 1 && queued.sink.updates.last?.entries.first?.name == "Latest manual read",
+               "A same-week calendar notification cannot discard an in-flight explicit weekly-only recheck")
+    }
+
     private static func checkStaleRequests() async {
         let disabled = AutomationHarness(context())
         disabled.provider.suspendEvents = true
@@ -515,6 +577,7 @@ enum AutomationVerification {
         await checkMetadataAndLaunchRecovery()
         await checkTodaySwitch()
         await checkFailuresPreserveWallpaper()
+        await checkManualPermissionRecovery()
         await checkStaleRequests()
         print("Automation verification completed: \(checks) checks passed using synthetic fixtures only.")
     }

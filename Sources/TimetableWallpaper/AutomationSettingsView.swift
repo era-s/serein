@@ -53,6 +53,28 @@ struct AutomationSettingsView: View {
                                 store.showCalendarImport = true
                             }
                         }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(StudioStyle.accent)
+                        if store.calendarRecovery.access != .authorized || store.automation.needsCalendarReconnect {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("권한 연결을 다시 확인해주세요")
+                                    .font(.system(size: 11, weight: .medium)).foregroundStyle(StudioStyle.accent)
+                                Text("설정에서 전체 접근이 켜져 있어도 앱 업데이트 후 다시 연결해야 할 수 있어요.")
+                                    .font(.system(size: 10)).foregroundStyle(StudioStyle.muted).lineSpacing(3)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Button(action: store.reconnectCalendar) {
+                                    HStack(spacing: 7) {
+                                        if store.calendarRecovery.isConnecting { ProgressView().controlSize(.mini) }
+                                        Text("권한 연결 다시 확인")
+                                    }
+                                }.buttonStyle(.plain).font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(StudioStyle.accent)
+                                    .disabled(store.calendarRecovery.isConnecting)
+                                    .accessibilityIdentifier("reconnect-calendar-access")
+                                if let error = store.calendarRecovery.errorMessage {
+                                    Text(error).font(.system(size: 10)).foregroundStyle(StudioStyle.accent)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }.padding(.top, 5)
+                        }
                     }
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
@@ -108,7 +130,7 @@ struct AutomationSettingsView: View {
             }
         }.padding(28).frame(width: 860)
             .background(StudioStyle.sidebar).foregroundStyle(StudioStyle.ink).tint(StudioStyle.accent)
-            .onAppear { store.refreshDisplays(); store.refreshLoginStatus() }
+            .onAppear { store.refreshDisplays(); store.refreshLoginStatus(); store.refreshCalendarAccess() }
     }
 
     private func caption(_ title: String) -> some View {

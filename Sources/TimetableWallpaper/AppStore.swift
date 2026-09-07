@@ -30,9 +30,13 @@ final class AppStore: ObservableObject {
     private var checkTask: Task<Void, Never>?
     private var scheduledTrigger: AutomationTrigger?
     private var committingAutomation = false
+    private lazy var calendarProvider: any CalendarProviding = {
+        if isDemo { return DemoCalendarProvider() }
+        return SystemCalendarService()
+    }()
+    lazy var calendarRecovery = CalendarAccessRecovery(provider: calendarProvider)
     lazy var automation: WallpaperAutomation = {
-        let provider: any CalendarProviding = isDemo ? DemoCalendarProvider() : SystemCalendarService()
-        return WallpaperAutomation(provider: provider, apply: { [weak self] update in
+        return WallpaperAutomation(provider: calendarProvider, apply: { [weak self] update in
             guard let self else { return }
             if self.isDemo {
                 try WallpaperRenderer.pngData(entries: update.entries, configuration: update.configuration)
@@ -284,11 +288,34 @@ final class AppStore: ObservableObject {
         automationSettings = settings
     }
     func checkNow() { scheduleCheck(.manual, delay: 0) }
+    func refreshCalendarAccess() { calendarRecovery.refreshStatus() }
+
+    /// Permission is requested only from the user's explicit reconnect action.
+    /// Never replace a newly selected source with the connection shown at the
+    /// start of a permission dialog, or change the user's automation switches.
+    func reconnectCalendar() {
+        guard !calendarRecovery.isConnecting else { return }
+        let selectedConnection = calendarConnection
+        Task { [weak self] in
+            guard let self else { return }
+            let authorized = await self.calendarRecovery.reconnect()
+            guard authorized, !Task.isCancelled else { return }
+            guard self.calendarConnection == selectedConnection else {
+                self.message = "권한 연결을 확인했습니다. 새로 선택한 캘린더 설정을 유지합니다."
+                return
+            }
+            self.scheduledTrigger = nil
+            self.automation.configure(self.automationContext)
+            self.scheduleCheck(.manual, delay: 0)
+            self.message = "캘린더 권한 연결을 확인했습니다. 기존 자동화 설정으로 다시 확인합니다."
+        }
+    }
     private func scheduleCheck(_ trigger: AutomationTrigger, delay: Double) {
         checkTask?.cancel()
         // Explicit enable/scope changes must survive timer events during debounce.
         let selectedTrigger: AutomationTrigger
         if scheduledTrigger == .enabled || trigger == .enabled { selectedTrigger = .enabled }
+        else if scheduledTrigger == .manual || trigger == .manual { selectedTrigger = .manual }
         else if scheduledTrigger == .settingsChanged { selectedTrigger = .settingsChanged }
         else { selectedTrigger = trigger }
         scheduledTrigger = selectedTrigger
@@ -297,14 +324,17 @@ final class AppStore: ObservableObject {
             guard !Task.isCancelled, let self else { return }
             self.scheduledTrigger = nil
             await self.automation.check(trigger: selectedTrigger, now: self.now)
+            self.refreshCalendarAccess()
             self.refreshPreview()
         }
     }
     private func startAutomation(initialTrigger: AutomationTrigger = .launch) {
         refreshDisplays()
         refreshLoginStatus()
+        refreshCalendarAccess()
         automation.configure(automationContext)
         automation.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &observers)
+        calendarRecovery.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &observers)
         Timer.publish(every: 60, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             self?.scheduleCheck(.clock, delay: 0)
         }.store(in: &observers)
@@ -320,6 +350,7 @@ final class AppStore: ObservableObject {
         for name in [NSApplication.didBecomeActiveNotification, NSNotification.Name.NSCalendarDayChanged] {
             NotificationCenter.default.publisher(for: name).receive(on: RunLoop.main).sink { [weak self] _ in
                 self?.refreshLoginStatus()
+                self?.refreshCalendarAccess()
                 self?.scheduleCheck(.wake, delay: 0.3)
             }.store(in: &observers)
         }

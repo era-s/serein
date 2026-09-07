@@ -9,6 +9,7 @@ final class WallpaperAutomation: ObservableObject {
     @Published private(set) var isChecking = false
     @Published private(set) var status = "자동 배경화면 교체가 꺼져 있습니다."
     @Published private(set) var lastAppliedAt: Date?
+    @Published private(set) var needsCalendarReconnect = false
 
     private let provider: any CalendarProviding
     private let apply: (AutomationUpdate) throws -> Void
@@ -61,6 +62,8 @@ final class WallpaperAutomation: ObservableObject {
             mergedTrigger = .enabled
         } else if trigger == .enabled {
             mergedTrigger = .enabled
+        } else if trigger == .manual || (previous?.configurationVersion == configurationVersion && previous?.trigger == .manual) {
+            mergedTrigger = .manual
         } else if previous?.configurationVersion == configurationVersion,
                   previous?.trigger == .settingsChanged {
             mergedTrigger = .settingsChanged
@@ -116,8 +119,12 @@ final class WallpaperAutomation: ObservableObject {
             $0.weekStart != week.start || $0.timeZoneID != candidate.timeZone.identifier
         } ?? false
         let initialize = request.trigger == .enabled || candidate.receipt == nil
-        let shouldFetch = settings.hasCalendarAutomation &&
-            (initialize || (settings.refreshWeekly && differentWeek) ||
+        // Explicit rechecking can recover a failed enable within this week.
+        // It must not advance an older snapshot when weekly refresh is disabled.
+        let mayRefreshWeek = request.trigger != .manual || !differentWeek || settings.refreshWeekly
+        let manualRefresh = request.trigger == .manual && mayRefreshWeek
+        let shouldFetch = settings.hasCalendarAutomation && mayRefreshWeek &&
+            (initialize || manualRefresh || (settings.refreshWeekly && differentWeek) ||
              (settings.refreshOnCalendarChange && !differentWeek))
         let shouldCheckAppearance = candidate.receipt != nil &&
             (settings.showToday || request.trigger == .settingsChanged || request.trigger == .enabled)
@@ -136,6 +143,7 @@ final class WallpaperAutomation: ObservableObject {
                 // Both user edits and newer notifications supersede this query.
                 guard revision == generation else { return }
                 let calendars = try validateConnection(connection)
+                needsCalendarReconnect = false
                 let converted = CalendarEventConverter.convert(events, week: week).entries
                 let oldEntries = candidate.entries
                 let existingByKey = Dictionary(oldEntries.compactMap { entry in
@@ -216,6 +224,9 @@ final class WallpaperAutomation: ObservableObject {
             }
         } catch {
             guard revision == generation else { return }
+            if let calendarError = error as? CalendarImportError, case .permissionDenied = calendarError {
+                needsCalendarReconnect = true
+            }
             status = "자동 교체를 완료하지 못했습니다. \(error.localizedDescription) 기존 배경화면을 유지합니다."
         }
     }

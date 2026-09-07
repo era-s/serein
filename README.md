@@ -13,7 +13,9 @@ macOS 14 이상, Swift 5.10 이상이 필요합니다. 외부 패키지나 API �
 open dist/Serein.app
 ```
 
-생성된 `Serein.app`을 응용 프로그램 폴더로 옮겨 사용할 수도 있습니다. 현재 빌드는 이 Mac에서 사용할 수 있도록 ad-hoc 서명한 개발 빌드이며, Apple 공증된 배포판은 아닙니다.
+생성된 `Serein.app`을 응용 프로그램 폴더로 옮겨 사용할 수도 있습니다. 개발 빌드는 이 Mac의 지속되는 인증서로 서명하며 Apple 공증된 배포판은 아닙니다. 빌드마다 앱 식별이 달라져 캘린더 권한이 끊기던 ad-hoc 서명은 사용하지 않습니다.
+
+첫 빌드에서 `~/Library/Application Support/SereinDevelopmentSigning/identity`에 전용 개발 인증서와 잠긴 키체인을 만들고 이후 빌드에 재사용합니다. 개인키·키체인 암호는 저장소에 넣지 않습니다. 이 디렉터리를 삭제하면 다음 서명의 식별이 바뀌므로 업데이트용으로 보존하세요. 시스템 인증서 신뢰 설정은 변경하지 않으며 빌드 중 추가한 키체인 검색 항목은 종료 시 제거합니다. 기존 Apple 개발 인증서가 있으면 `SEREIN_SIGN_IDENTITY`와 선택적으로 `SEREIN_SIGN_KEYCHAIN`을 지정할 수 있습니다.
 
 ## 사용법
 
@@ -62,6 +64,7 @@ open dist/Serein.app
 - **주간 교체를 끄면** 지난주 시간표를 다음 주로 넘기지 않습니다. 지난주 시간표에는 오늘 표시를 지우고 이전 일정을 유지합니다. 과거/미래 주를 수동으로 가져오면 캘린더 자동 교체 두 옵션을 꺼서 해당 주를 유지합니다.
 - **오늘 표시만** 켜고 아직 배경화면을 적용하지 않았다면 미리보기/PNG에만 표시합니다. 모든 옵션을 끄면 현재 배경화면은 그대로 두고 이후 갱신을 멈춥니다. 테두리를 즉시 없애려면 옵션을 끈 뒤 **배경화면으로 설정**을 누릅니다.
 - 권한 철회·선택한 캘린더 삭제·조회 실패 시 이전 일정을 유지하며 상태를 표시합니다. 개별 디스플레이의 현재 데스크탑만 선택한 경우, 그 디스플레이가 빠지면 재연결을 기다립니다. 날짜 표시만 갱신하는 경우에는 저장된 일정을 사용합니다.
+- **설정의 전체 접근이 켜져 있는데 권한 오류가 나면:** 자동화 화면의 **권한 연결 다시 확인**으로 macOS 연결을 다시 확인합니다. 이전 임시 서명에서 처음 전환할 때 접근을 다시 허용해야 할 수 있습니다. 복구 후 기존 옵션으로 이번 주를 다시 검사하며, 거절·오류 시 기존 일정·옵션·배경화면을 보존합니다. 백그라운드 검사는 권한 대화상자를 열지 않습니다. **지금 확인**은 주간 교체만 켠 경우에도 같은 주의 실패한 갱신을 재시도합니다.
 - [자동화 결과 PNG](artifacts/automation-wallpaper-demo.png) · [오늘 테두리 예시](artifacts/today-indicator-demo.png) · [빈 캘린더 연결 화면](artifacts/calendar-empty-demo.png)
 
 ## 동작과 한계
@@ -83,7 +86,9 @@ Command Line Tools만 설치된 Mac에서도 실행할 수 있는 검증 스크�
 ./scripts/verify-ocr.sh
 ./scripts/verify-calendar.sh
 ./scripts/verify-automation.sh
+./scripts/verify-calendar-recovery.sh
 ./scripts/verify-spaces.sh
+python3 scripts/verify-signing.py
 ```
 
 Xcode의 XCTest가 설치된 환경에서는 `swift test`로 동일 영역의 유닛 테스트도 실행할 수 있습니다. Command Line Tools만 있는 환경은 XCTest 모듈이 없을 수 있습니다.
@@ -96,7 +101,7 @@ dist/Serein.app/Contents/MacOS/Serein --render-demo artifacts
 
 자동화 예시는 `open dist/Serein.app --args --automation-demo`로 실행합니다. 세 옵션은 예시 캘린더와 고정된 수요일을 사용하고, 적용 시 임시 PNG만 저장합니다. 실제 배경화면·로그인 설정·저장된 작업은 변경하지 않습니다. 예시 모드를 끝내려면 앱을 종료하고 인자 없이 다시 엽니다.
 
-캘린더 변환·권한·비동기 상태 검증 85개, 자동화 86개, 모든 Space 변환·저장·복구 366개는 합성 데이터와 테스트 provider로 수행했습니다. 렌더러 28개와 실제 Vision OCR을 포함한 47개 검사도 통과했습니다. EventKit 변환·조회 오류 흐름은 가짜 provider로 검증했고, 로그인 항목 등록은 개발 중 실행하지 않았습니다. 전체 Space 적용은 위의 실제 Mac 검증 결과를 참고하세요. UI에서는 예시 캘린더 조회·수정·반영·3024×1964 PNG 저장을 검증했습니다.
+캘린더 변환·권한·비동기 상태 검증 85개, 자동화 94개, 명시적 권한 복구 43개, 모든 Space 변환·저장·복구 366개는 합성 데이터와 테스트 provider로 수행했습니다. 렌더러 28개와 실제 Vision OCR을 포함한 47개 검사도 통과했습니다. EventKit 변환·조회 오류 흐름은 가짜 provider로 검증했고, 로그인 항목 등록은 개발 중 실행하지 않았습니다. 전체 Space 적용은 위의 실제 Mac 검증 결과를 참고하세요. UI에서는 예시 캘린더 조회·수정·반영·3024×1964 PNG 저장을 검증했습니다.
 
 - [Ember](artifacts/serein-ember.png) · [Moss](artifacts/serein-moss.png) · [Midnight](artifacts/serein-midnight.png)
 - [실제 OCR 검증 이미지](artifacts/ocr-fixture.png) · [인식 결과](artifacts/ocr-fixture.txt)
@@ -113,6 +118,7 @@ dist/Serein.app/Contents/MacOS/Serein --render-demo artifacts
 | [P003](docs/prompts/P003.md) | Google Calendar·Apple 캘린더의 주간 일정으로 배경화면 생성 | [개발 기록](docs/devlog.md) |
 | [P004](docs/prompts/P004.md) | 이번 주 변경 감지·오늘 표시·주간 자동 교체 | [개발 기록](docs/devlog.md) |
 | [P005](docs/prompts/P005.md) | Desktop 2에만 적용되는 문제 해결, 모든 Space·디스플레이 적용 | [개발 기록](docs/devlog.md) |
+| [P006](docs/prompts/P006.md) | 전체 접근이 허용되어 있는데 자동화가 실패하는 문제 복구 | [개발 기록](docs/devlog.md) |
 
 ```sh
 git log --all --extended-regexp --grep='^Prompt-ID: P001$' --format='%h %s'
