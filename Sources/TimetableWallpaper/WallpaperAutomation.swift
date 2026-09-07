@@ -145,22 +145,29 @@ final class WallpaperAutomation: ObservableObject {
                 let calendars = try validateConnection(connection)
                 needsCalendarReconnect = false
                 let converted = CalendarEventConverter.convert(events, week: week).entries
+                // Reconcile every source record before filtering, so a hidden
+                // event can keep its latest identity/details without resurfacing.
+                candidate.calendarVisibility.reconcile(with: converted)
                 let oldEntries = candidate.entries
                 let existingByKey = Dictionary(oldEntries.compactMap { entry in
                     entry.calendarSourceKey.map { ($0, entry.id) }
                 }, uniquingKeysWith: { first, _ in first })
-                let incoming = converted.map { entry in
+                let incoming = converted.filter { !candidate.calendarVisibility.isHidden($0) }.map { entry in
                     var entry = entry
                     if let key = entry.calendarSourceKey, let id = existingByKey[key] { entry.id = id }
                     return entry
                 }
                 // Track precisely the entries owned by this connection. Other
                 // imports and manually entered recurring classes are preserved.
+                let incomingKeys = Set(incoming.compactMap(\.calendarSourceKey))
                 candidate.entries = oldEntries.filter { entry in
+                    guard !candidate.calendarVisibility.isHidden(entry) else { return false }
                     guard let key = entry.calendarSourceKey else { return true }
-                    return !connection.managedEntryKeys.contains(key)
+                    // Restoring a hidden entry can put its last saved row back
+                    // before it is managed again. Replace that same source once.
+                    return !connection.managedEntryKeys.contains(key) && !incomingKeys.contains(key)
                 } + incoming
-                connection.managedEntryKeys = Set(incoming.compactMap(\.calendarSourceKey))
+                connection.managedEntryKeys = incomingKeys
                 connection.weekStart = week.start
                 connection.timeZoneID = candidate.timeZone.identifier
                 connection.calendarNames = calendars
@@ -173,6 +180,8 @@ final class WallpaperAutomation: ObservableObject {
             }
 
             guard revision == generation else { return }
+            let visibility = candidate.calendarVisibility
+            candidate.entries.removeAll { visibility.isHidden($0) }
             candidate.configuration = Self.effectiveConfiguration(candidate.configuration, settings: settings,
                 connection: candidate.connection, now: request.now, timeZone: candidate.timeZone)
             let fingerprint = Self.fingerprint(entries: candidate.entries,
@@ -196,12 +205,13 @@ final class WallpaperAutomation: ObservableObject {
                 candidate.receipt = receipt
                 let metadataChanged = candidate.connection != context?.connection ||
                     candidate.entries != context?.entries || candidate.configuration != context?.configuration ||
-                    candidate.receipt != context?.receipt
+                    candidate.receipt != context?.receipt || candidate.calendarVisibility != context?.calendarVisibility
                 context = candidate
                 if metadataChanged {
                     onStateChange?(AutomationUpdate(entries: candidate.entries,
                         configuration: candidate.configuration, connection: candidate.connection,
-                        receipt: receipt, reason: "배경화면은 같아 캘린더 연결 정보만 갱신했습니다."))
+                        receipt: receipt, reason: "배경화면은 같아 캘린더 연결 정보만 갱신했습니다.",
+                        calendarVisibility: candidate.calendarVisibility))
                 }
                 status = waitingStatus(candidate, differentWeek: differentWeek && !shouldFetch)
                 return
@@ -212,7 +222,8 @@ final class WallpaperAutomation: ObservableObject {
                 weekStart: candidate.connection?.weekStart,
                 dayKey: Self.dayKey(now: request.now, timeZone: candidate.timeZone), targetDisplayID: target)
             let update = AutomationUpdate(entries: candidate.entries, configuration: candidate.configuration,
-                connection: candidate.connection, receipt: receipt, reason: reason)
+                connection: candidate.connection, receipt: receipt, reason: reason,
+                calendarVisibility: candidate.calendarVisibility)
             // No state or receipt is advanced before the native apply succeeds.
             try apply(update)
             candidate.receipt = receipt

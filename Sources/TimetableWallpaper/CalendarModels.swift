@@ -22,6 +22,9 @@ struct CalendarEventRecord {
     var isCancelled: Bool = false
     var isDeclined: Bool = false
     var occurrenceDate: Date? = nil
+    /// Stable series identity when the provider exposes one. Separate from `id`
+    /// so existing per-day source keys and imported entry identities stay intact.
+    var seriesID: String? = nil
 }
 
 struct CalendarWeek: Equatable {

@@ -64,7 +64,9 @@ enum CalendarEventConverter {
                     startMinutes: startMinute,
                     endMinutes: endMinute,
                     location: event.location.trimmingCharacters(in: .whitespacesAndNewlines),
-                    calendarSourceKey: key
+                    calendarSourceKey: key,
+                    calendarEventKey: eventKey(event),
+                    calendarOccurrenceKey: occurrenceKey(event)
                 )
                 cursor = segmentEnd
             }
@@ -115,13 +117,34 @@ enum CalendarEventConverter {
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
+    private static func eventKey(_ event: CalendarEventRecord) -> String {
+        identityDigest(["serein-calendar-event-v1", event.calendarID, stableIdentity(event)])
+    }
+
+    private static func occurrenceKey(_ event: CalendarEventRecord) -> String {
+        // EventKit retains the original occurrenceDate when an occurrence is
+        // moved. Single events use their stable identity without their start time.
+        let occurrence = event.occurrenceDate.map { String($0.timeIntervalSince1970.bitPattern) } ?? "single"
+        return identityDigest(["serein-calendar-occurrence-v1", event.calendarID, stableIdentity(event), occurrence])
+    }
+
+    private static func stableIdentity(_ event: CalendarEventRecord) -> String {
+        if let seriesID = event.seriesID, !seriesID.isEmpty { return seriesID }
+        return event.id
+    }
+
+    private static func identityDigest(_ parts: [String]) -> String {
+        let data = (try? JSONEncoder().encode(parts)) ?? Data()
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     private static func sortKey(_ event: CalendarEventRecord) -> String {
         let parts = [event.calendarID, event.id,
                      event.occurrenceDate.map { String($0.timeIntervalSince1970.bitPattern) } ?? "",
                      String(event.startDate.timeIntervalSince1970.bitPattern),
                      String(event.endDate.timeIntervalSince1970.bitPattern),
                      event.title, event.location, String(event.isAllDay),
-                     String(event.isCancelled), String(event.isDeclined)]
+                     String(event.isCancelled), String(event.isDeclined), event.seriesID ?? ""]
         return String(data: (try? JSONEncoder().encode(parts)) ?? Data(), encoding: .utf8) ?? ""
     }
 }

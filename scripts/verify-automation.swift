@@ -629,6 +629,7 @@ private final class AutomationHarness {
         context.configuration = latest.configuration
         context.connection = latest.connection
         context.receipt = latest.receipt
+        context.calendarVisibility = latest.calendarVisibility
         engine.configure(context)
     }
 }

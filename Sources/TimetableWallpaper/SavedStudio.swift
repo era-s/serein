@@ -7,6 +7,9 @@ struct SavedStudio: Codable {
     var automation: AutomationSettings? = nil
     var connection: CalendarConnection? = nil
     var receipt: AutomationReceipt? = nil
+    // Optional for older v1–v3 files. Exclusions belong to the user's studio,
+    // not one connection snapshot, so changing calendars does not erase them.
+    var calendarVisibility: CalendarVisibility? = nil
 
     var isValid: Bool {
         (1...3).contains(version) && entries.allSatisfy { $0.validationError == nil }
@@ -14,6 +17,11 @@ struct SavedStudio: Codable {
             && (0...23).contains(configuration.startHour)
             && (1...24).contains(configuration.endHour)
             && configuration.startHour < configuration.endHour
+            && (calendarVisibility == nil || (
+                Set(calendarVisibility!.exclusions.map(\.id)).count == calendarVisibility!.exclusions.count
+                && calendarVisibility!.exclusions.allSatisfy {
+                    $0.entry.validationError == nil && !($0.entry.calendarSourceKey ?? "").isEmpty
+                }))
             && (connection == nil || (!connection!.calendarIDs.isEmpty && TimeZone(identifier: connection!.timeZoneID) != nil))
     }
 

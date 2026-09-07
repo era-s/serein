@@ -79,7 +79,8 @@ final class SystemCalendarService: CalendarProviding {
                 isAllDay: event.isAllDay,
                 isCancelled: event.status == .canceled,
                 isDeclined: event.attendees?.contains { $0.isCurrentUser && $0.participantStatus == .declined } ?? false,
-                occurrenceDate: event.occurrenceDate
+                occurrenceDate: event.occurrenceDate,
+                seriesID: Self.seriesID(event)
             )
         }
         try requireAccess()
@@ -101,6 +102,18 @@ final class SystemCalendarService: CalendarProviding {
                      event.endDate.map { String($0.timeIntervalSince1970.bitPattern) } ?? ""]
         let data = (try? JSONEncoder().encode(parts)) ?? Data()
         return "fallback-" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func seriesID(_ event: EKEvent) -> String? {
+        // EventKit documents the external identifier as shared by recurring
+        // occurrences. It can repeat across calendars, so the converter also
+        // includes calendarID. The local identifier is a best-effort fallback;
+        // a full calendar resync can replace local identifiers.
+        if let identifier = event.calendarItemExternalIdentifier, !identifier.isEmpty {
+            return "external:" + identifier
+        }
+        if !event.calendarItemIdentifier.isEmpty { return "local:" + event.calendarItemIdentifier }
+        return nil
     }
 
     private static func colorHex(_ cgColor: CGColor?) -> UInt32 {

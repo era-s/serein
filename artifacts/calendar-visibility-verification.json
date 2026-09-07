@@ -1,0 +1,35 @@
+{
+  "version": "0.3.3",
+  "build": 7,
+  "defaultHideScope": "event, including future recurring occurrences",
+  "verificationMode": "Synthetic calendar providers and native demo UI; no personal events hidden during verification.",
+  "checks": {
+    "calendar": 85,
+    "automation": 94,
+    "calendarRecovery": 43,
+    "calendarVisibility": 32,
+    "realAppStoreDemo": 37,
+    "renderer": 28
+  },
+  "nativeDemoFlow": {
+    "initialEntries": 5,
+    "afterHide": 4,
+    "afterManualCalendarRefresh": 4,
+    "afterRestore": 5,
+    "hiddenScopeLabel": "이후 반복 일정도 계속 숨김"
+  },
+  "demoPreservedPersonalStudioBytes": true,
+  "demoPreservedSystemWallpaperStoreBytes": true,
+  "updatedSignatureSatisfiesPreviouslyAuthorizedRequirement": true,
+  "calendarPermissionPreservedAfterUpdate": true,
+  "actualCalendarStatusAfterUpdate": "Current week unchanged; waiting for calendar changes.",
+  "existingVisibleEntriesPreserved": true,
+  "designPreserved": true,
+  "automationOptionsPreserved": true,
+  "previousApplicationReceiptPreserved": true,
+  "selectedCalendarsPreserved": true,
+  "legacyImportedEntriesHydrated": true,
+  "noPersonalExclusionsAdded": true,
+  "wallpaperStorePreservedAfterNormalLaunch": true,
+  "privacy": "No personal event titles, calendar IDs, account identifiers, private file paths or signing credentials included."
+}

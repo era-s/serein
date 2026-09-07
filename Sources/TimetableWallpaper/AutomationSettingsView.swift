@@ -30,9 +30,20 @@ struct AutomationSettingsView: View {
                            value: $store.automationSettings.refreshWeekly, id: "auto-weekly", needsCalendar: true)
                     option("rectangle.inset.filled", title: "오늘을 은은하게 표시", detail: "오늘 열에 얇은 테두리를 더합니다. 한 번 적용한 뒤에는 날짜에 맞춰 매일 이동합니다.",
                            value: $store.automationSettings.showToday, id: "auto-today", needsCalendar: false)
-                    Text("자동 교체를 켜면 선택한 캘린더의 이번 주 시간 지정 일정을 모두 반영하고 바로 적용합니다. 수동으로 추가한 일정은 유지합니다.")
+                    Text("자동 교체를 켜면 숨긴 일정을 제외한 이번 주 시간 지정 일정을 반영합니다. 수동으로 추가한 일정은 유지합니다.")
                         .font(.system(size: 10)).foregroundStyle(StudioStyle.muted).lineSpacing(4)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 2)
+                    Button {
+                        dismiss()
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(300))
+                            store.showHiddenCalendarEntries = true
+                        }
+                    } label: {
+                        Label("숨긴 일정 \(store.calendarVisibility.exclusions.count)개 관리", systemImage: "eye.slash")
+                            .font(.system(size: 11)).frame(maxWidth: .infinity, alignment: .leading)
+                    }.buttonStyle(.plain).foregroundStyle(StudioStyle.accent)
+                        .accessibilityIdentifier("manage-hidden-calendar-entries")
                 }.frame(maxWidth: .infinity)
                 VStack(alignment: .leading, spacing: 19) {
                     VStack(alignment: .leading, spacing: 10) {

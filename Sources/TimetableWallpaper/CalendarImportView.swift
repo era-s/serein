@@ -5,16 +5,19 @@ struct CalendarImportView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: CalendarImportModel
     let existingEntries: [ScheduleEntry]
-    let onImport: ([ScheduleEntry], Bool, String?, CalendarConnection) -> Void
+    let calendarVisibility: CalendarVisibility
+    let onImport: ([ScheduleEntry], Bool, String?, CalendarConnection, [ScheduleEntry]) -> Void
     @State private var editingEntry: ScheduleEntry?
     @State private var replace = true
     @State private var includeWeekTitle = true
     @State private var showGoogleHelp = false
 
     init(model: CalendarImportModel, existingEntries: [ScheduleEntry],
-         onImport: @escaping ([ScheduleEntry], Bool, String?, CalendarConnection) -> Void) {
+         calendarVisibility: CalendarVisibility = CalendarVisibility(),
+         onImport: @escaping ([ScheduleEntry], Bool, String?, CalendarConnection, [ScheduleEntry]) -> Void) {
         _model = StateObject(wrappedValue: model)
         self.existingEntries = existingEntries
+        self.calendarVisibility = calendarVisibility
         self.onImport = onImport
     }
 
@@ -24,6 +27,13 @@ struct CalendarImportView: View {
 
     private var canImport: Bool {
         model.canImport && selectedEntries.allSatisfy { $0.validationError == nil }
+    }
+
+    private var visibleSelectedCount: Int {
+        var visibility = calendarVisibility
+        for entry in model.reviewEntries where !model.selectedEntryIDs.contains(entry.id) { visibility.hide(entry) }
+        visibility.reconcile(with: model.reviewEntries)
+        return selectedEntries.filter { !visibility.isHidden($0) }.count
     }
 
     var body: some View {
@@ -278,6 +288,10 @@ struct CalendarImportView: View {
                         if !entry.location.isEmpty {
                             Text(entry.location).font(.system(size: 10)).foregroundStyle(StudioStyle.muted).lineLimit(2)
                         }
+                        if calendarVisibility.isHidden(entry) {
+                            Text("이미 숨긴 일정 · 숨긴 일정 관리에서 다시 표시할 수 있어요")
+                                .font(.system(size: 9)).foregroundStyle(StudioStyle.accent)
+                        }
                     }
                     Spacer(minLength: 5)
                     Image(systemName: "pencil").font(.system(size: 10)).foregroundStyle(StudioStyle.muted).padding(.top, 2)
@@ -300,13 +314,14 @@ struct CalendarImportView: View {
                 }.toggleStyle(.checkbox).font(.system(size: 11))
                 Spacer(minLength: 0)
                 Button("취소") { dismiss() }.buttonStyle(StudioButtonStyle(primary: false)).keyboardShortcut(.cancelAction)
-                Button(model.isEmptySnapshot ? "빈 주간 시간표로 연결" : "\(selectedEntries.count)개 일정 반영") {
+                Button(model.isEmptySnapshot ? "빈 주간 시간표로 연결" : "\(visibleSelectedCount)개 일정 반영") {
                     guard model.validateForImport() else { return }
                     let connection = CalendarConnection(calendarIDs: model.selectedCalendarIDs,
                         calendarNames: model.calendars.filter { model.selectedCalendarIDs.contains($0.id) }.map(\.title),
                         weekStart: model.week.start, timeZoneID: model.week.timeZone.identifier,
                         managedEntryKeys: Set(selectedEntries.compactMap(\.calendarSourceKey)), includeWeekTitle: includeWeekTitle)
-                    onImport(selectedEntries, replace, includeWeekTitle ? model.week.label : nil, connection)
+                    let excluded = model.reviewEntries.filter { !model.selectedEntryIDs.contains($0.id) }
+                    onImport(selectedEntries, replace, includeWeekTitle ? model.week.label : nil, connection, excluded)
                     dismiss()
                 }.buttonStyle(StudioButtonStyle(primary: true)).disabled(!canImport)
                     .accessibilityIdentifier("apply-calendar-events")
@@ -314,7 +329,7 @@ struct CalendarImportView: View {
             Text(model.isEmptySnapshot
                  ? (replace ? "기존 시간표를 비우고 선택한 캘린더에 연결합니다. 연결 후 자동 교체 옵션을 켤 수 있습니다."
                             : "기존 시간표를 유지하고 선택한 캘린더에 연결합니다. 연결 후 자동 교체 옵션을 켤 수 있습니다.")
-                 : "선택한 주의 일정을 반영합니다. 연결 후 자동 교체 옵션을 켜면 이번 주 변경 사항과 새 주를 자동으로 가져옵니다.")
+                 : "선택 해제한 일정은 이후 반복 일정도 숨깁니다. 기존에 숨긴 일정도 계속 제외하며, ‘숨긴 일정’에서 다시 표시할 수 있습니다. 원본 캘린더는 유지합니다.")
                 .font(.system(size: 10)).foregroundStyle(StudioStyle.muted).fixedSize(horizontal: false, vertical: true)
         }
     }

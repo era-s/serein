@@ -6,6 +6,8 @@ struct EntryEditor: View {
     var otherEntries: [ScheduleEntry]
     var onSave: (ScheduleEntry) -> Void
     var onDelete: (() -> Void)? = nil
+    var deleteTitle = "삭제"
+    var deleteDetail: String? = nil
     @State private var start = ""
     @State private var end = ""
 
@@ -76,9 +78,15 @@ struct EntryEditor: View {
             } else if overlapping {
                 Label("같은 시간의 일정이 있습니다. 나란히 표시됩니다.", systemImage: "rectangle.split.2x1").font(.system(size: 11)).foregroundStyle(StudioStyle.accent)
             }
+            if onDelete != nil, let deleteDetail {
+                Label(deleteDetail, systemImage: "eye.slash")
+                    .font(.system(size: 10)).foregroundStyle(StudioStyle.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 if let onDelete {
-                    Button("삭제", role: .destructive) { onDelete(); dismiss() }.buttonStyle(.plain).foregroundStyle(StudioStyle.accent)
+                    Button(deleteTitle, role: .destructive) { onDelete(); dismiss() }
+                        .buttonStyle(.plain).foregroundStyle(StudioStyle.accent).accessibilityIdentifier("remove-entry")
                 }
                 Spacer()
                 Button("취소") { dismiss() }.keyboardShortcut(.cancelAction).buttonStyle(StudioButtonStyle(primary: false))

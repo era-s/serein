@@ -9,6 +9,10 @@ struct ScheduleEntry: Identifiable, Codable, Hashable, Sendable {
     var endMinutes: Int
     var location: String = ""
     var calendarSourceKey: String? = nil
+    /// Calendar-scoped identity shared by the event's recurring occurrences.
+    var calendarEventKey: String? = nil
+    /// Calendar-scoped original occurrence identity, shared by overnight segments.
+    var calendarOccurrenceKey: String? = nil
 
     var timeLabel: String { "\(Self.time(startMinutes)) – \(Self.time(endMinutes))" }
     static func time(_ minutes: Int) -> String { String(format: "%02d:%02d", minutes / 60, minutes % 60) }

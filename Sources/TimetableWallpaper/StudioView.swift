@@ -41,7 +41,9 @@ struct StudioView: View {
         .tint(StudioStyle.accent)
         .sheet(item: $editingEntry) { entry in
             EntryEditor(entry: entry, otherEntries: store.entries, onSave: { store.save($0) },
-                onDelete: store.entries.contains(where: { $0.id == entry.id }) ? { store.remove(entry.id) } : nil)
+                onDelete: store.entries.contains(where: { $0.id == entry.id }) ? { store.remove(entry.id) } : nil,
+                deleteTitle: entry.calendarSourceKey == nil ? "삭제" : "배경화면에서 숨기기",
+                deleteDetail: entry.calendarSourceKey == nil ? nil : "숨기면 이후 반복 일정도 제외됩니다. 원본 캘린더는 유지하며, ‘숨긴 일정’에서 되돌릴 수 있습니다.")
         }
         .sheet(isPresented: Binding(get: { store.importResult != nil }, set: { if !$0 { store.importResult = nil } })) {
             if let result = store.importResult {
@@ -58,20 +60,23 @@ struct StudioView: View {
                 ? CalendarImportModel(provider: DemoCalendarProvider(), date: DemoCalendarProvider.anchor,
                                       isDemo: true, timeZone: TimeZone(identifier: "Asia/Seoul")!)
                 : CalendarImportModel()
-            CalendarImportView(model: model, existingEntries: store.entries) { incoming, replace, subtitle, connection in
-                store.importCalendarEntries(incoming, replace: replace, subtitle: subtitle, connection: connection)
+            CalendarImportView(model: model, existingEntries: store.entries, calendarVisibility: store.calendarVisibility) { incoming, replace, subtitle, connection, excluded in
+                store.importCalendarEntries(incoming, replace: replace, subtitle: subtitle, connection: connection, excluded: excluded)
             }
         }
         .sheet(isPresented: $store.showAutomation) {
             AutomationSettingsView().environmentObject(store)
         }
+        .sheet(isPresented: $store.showHiddenCalendarEntries) {
+            HiddenCalendarEntriesView().environmentObject(store)
+        }
         .alert("작업을 완료하지 못했습니다", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("확인", role: .cancel) { store.error = nil }
         } message: { Text(store.error ?? "") }
         .confirmationDialog("시간표를 모두 비울까요?", isPresented: $showClearConfirmation, titleVisibility: .visible) {
-            Button("모두 비우기", role: .destructive) { store.entries = [] }
+            Button("모두 비우기", role: .destructive) { store.clearEntries() }
             Button("취소", role: .cancel) {}
-        } message: { Text("현재 입력한 일정이 삭제됩니다.") }
+        } message: { Text("직접 입력한 일정은 삭제합니다. 캘린더 일정은 이후 반복 일정까지 배경화면에서 숨기며, 원본 캘린더는 유지합니다.") }
         .overlay(alignment: .bottom) {
             if let message = store.message {
                 HStack(spacing: 10) {
@@ -203,11 +208,24 @@ struct StudioView: View {
                                 .buttonStyle(.plain)
                                 .contextMenu {
                                     Button("수정") { editingEntry = entry }
-                                    Button("삭제", role: .destructive) { store.remove(entry.id) }
+                                    if entry.calendarSourceKey != nil {
+                                        Button("배경화면에서 숨기기 · 반복 포함") { store.remove(entry.id) }
+                                        Button("이번 회차만 숨기기") { store.remove(entry.id, scope: .occurrence) }
+                                    } else {
+                                        Button("삭제", role: .destructive) { store.remove(entry.id) }
+                                    }
                                 }
                         }
                     }
                 }.padding(.horizontal, 22)
+            }
+            if !store.calendarVisibility.exclusions.isEmpty {
+                Button { store.showHiddenCalendarEntries = true } label: {
+                    Label("숨긴 일정 \(store.calendarVisibility.exclusions.count)", systemImage: "eye.slash")
+                        .font(.system(size: 11)).frame(maxWidth: .infinity, alignment: .leading)
+                }.buttonStyle(.plain).foregroundStyle(StudioStyle.accent)
+                    .padding(.horizontal, 22).padding(.top, 10)
+                    .accessibilityIdentifier("open-hidden-calendar-entries")
             }
             HStack {
                 Text("주 \(store.weeklyHours)시간").font(.system(size: 10))

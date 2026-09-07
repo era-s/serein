@@ -34,6 +34,7 @@ struct AutomationContext {
     var settings: AutomationSettings
     var connection: CalendarConnection?
     var receipt: AutomationReceipt?
+    var calendarVisibility = CalendarVisibility()
     var timeZone: TimeZone = .current
 }
 
@@ -47,6 +48,7 @@ struct AutomationUpdate {
     var connection: CalendarConnection?
     var receipt: AutomationReceipt
     var reason: String
+    var calendarVisibility = CalendarVisibility()
 }
 
 struct WallpaperDisplay: Identifiable, Equatable {

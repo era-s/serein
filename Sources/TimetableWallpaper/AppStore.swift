@@ -18,12 +18,14 @@ final class AppStore: ObservableObject {
     @Published var error: String?
     @Published var showCalendarImport = false
     @Published var showAutomation = false
+    @Published var showHiddenCalendarEntries = false
     @Published var automationSettings = AutomationSettings() { didSet { automationOptionsChanged(oldValue) } }
     @Published private(set) var calendarConnection: CalendarConnection?
     @Published private(set) var displays: [WallpaperDisplay] = []
     @Published private(set) var loginEnabled = false
     @Published private(set) var loginNeedsApproval = false
     @Published private(set) var automationReceipt: AutomationReceipt?
+    @Published private(set) var calendarVisibility = CalendarVisibility()
     let isDemo = CommandLine.arguments.contains("--calendar-demo") || CommandLine.arguments.contains("--automation-demo")
     var now: Date { isDemo ? DemoCalendarProvider.anchor.addingTimeInterval(2 * 86400 + 12 * 3600) : Date() }
     private var observers = Set<AnyCancellable>()
@@ -86,6 +88,8 @@ final class AppStore: ObservableObject {
                 automationSettings = saved.automation ?? AutomationSettings()
                 calendarConnection = saved.connection
                 automationReceipt = saved.receipt
+                calendarVisibility = saved.calendarVisibility ?? CalendarVisibility()
+                entries.removeAll { calendarVisibility.isHidden($0) }
             } catch {
                 let recovery = Self.supportDirectory.appendingPathComponent("studio-recovery-\(UUID().uuidString).json")
                 do {
@@ -114,7 +118,8 @@ final class AppStore: ObservableObject {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(SavedStudio(entries: entries, configuration: configuration,
-                automation: automationSettings, connection: calendarConnection, receipt: automationReceipt))
+                automation: automationSettings, connection: calendarConnection, receipt: automationReceipt,
+                calendarVisibility: calendarVisibility))
                 .write(to: Self.supportDirectory.appendingPathComponent("studio.json"), options: .atomic)
         } catch { self.error = "작업을 저장하지 못했습니다. \(error.localizedDescription)" } }
         if !committingAutomation {
@@ -150,15 +155,67 @@ final class AppStore: ObservableObject {
         if let index = entries.firstIndex(where: { $0.id == entry.id }) { entries[index] = entry }
         else { entries.append(entry) }
     }
-    func remove(_ id: UUID) { entries.removeAll { $0.id == id } }
+    func remove(_ id: UUID, scope: CalendarExclusionScope = .event) {
+        guard let entry = entries.first(where: { $0.id == id }) else { return }
+        guard entry.calendarSourceKey != nil else {
+            entries.removeAll { $0.id == id }
+            return
+        }
+        // Persist the exclusion and removed rows as one edit before scheduling
+        // another query. configure() also invalidates a fetch already in flight.
+        loading = true
+        calendarVisibility.hide(entry, scope: scope)
+        entries.removeAll { calendarVisibility.isHidden($0) }
+        loading = false
+        changed()
+        refreshAfterVisibilityEdit()
+        message = scope == .event
+            ? "배경화면에서 숨겼습니다. 이후 반복 일정도 제외하며, 숨긴 일정에서 되돌릴 수 있습니다."
+            : "이번 회차를 숨겼습니다. 다음 반복 일정은 계속 표시합니다."
+    }
 
-    func importCalendarEntries(_ incoming: [ScheduleEntry], replace: Bool, subtitle: String?, connection: CalendarConnection) {
-        guard incoming.allSatisfy({ $0.validationError == nil }) else {
+    func clearEntries() {
+        loading = true
+        for entry in entries where entry.calendarSourceKey != nil { calendarVisibility.hide(entry) }
+        entries = []
+        loading = false
+        changed()
+        refreshAfterVisibilityEdit()
+        message = "시간표를 비웠습니다. 캘린더 일정의 숨김은 동기화 후에도 유지합니다."
+    }
+
+    func restoreHiddenCalendarEntry(_ id: UUID) {
+        guard calendarVisibility.restore(id) != nil else { return }
+        changed()
+        if automationSettings.hasCalendarAutomation {
+            scheduleCheck(.manual, delay: 0)
+            message = "숨김을 해제했습니다. 현재 연결한 캘린더의 최신 일정을 확인합니다."
+        } else {
+            message = "숨김을 해제했습니다. 캘린더에서 다시 가져오면 표시됩니다."
+        }
+    }
+
+    private func refreshAfterVisibilityEdit() {
+        // Resolve legacy source-only rows now, including weekly-only setups,
+        // so a future recurrence can inherit the same series exclusion.
+        guard automationSettings.hasCalendarAutomation, let connection = calendarConnection else { return }
+        if automationSettings.refreshWeekly || connection.weekStart == CalendarWeek(containing: now).start {
+            scheduleCheck(.manual, delay: 0)
+        }
+    }
+
+    func importCalendarEntries(_ incoming: [ScheduleEntry], replace: Bool, subtitle: String?, connection: CalendarConnection,
+                               excluded: [ScheduleEntry] = []) {
+        guard (incoming + excluded).allSatisfy({ $0.validationError == nil }) else {
             error = "가져올 일정의 이름과 시간을 확인해주세요."
             return
         }
         loading = true
-        entries = replace ? incoming : CalendarEntryMerger.merge(existing: entries, incoming: incoming)
+        for entry in excluded { calendarVisibility.hide(entry) }
+        calendarVisibility.reconcile(with: incoming)
+        let visible = incoming.filter { !calendarVisibility.isHidden($0) }
+        entries = replace ? visible : CalendarEntryMerger.merge(existing: entries, incoming: visible)
+        entries.removeAll { calendarVisibility.isHidden($0) }
         calendarConnection = connection
         if connection.weekStart != CalendarWeek(containing: now).start {
             automationSettings.refreshOnCalendarChange = false
@@ -168,7 +225,8 @@ final class AppStore: ObservableObject {
         loading = false
         changed()
         showCalendarImport = false
-        message = incoming.isEmpty ? "일정이 없는 주간 시간표로 캘린더를 연결했습니다. 자동화에서 주간 교체를 켤 수 있습니다." : "캘린더 일정 \(incoming.count)개를 반영했습니다."
+        message = incoming.isEmpty ? "일정이 없는 주간 시간표로 캘린더를 연결했습니다. 자동화에서 주간 교체를 켤 수 있습니다."
+            : "캘린더 일정 \(visible.count)개를 반영했습니다." + (visible.count < incoming.count ? " 숨긴 일정은 제외했습니다." : "")
     }
 
     func chooseImage() {
@@ -248,7 +306,7 @@ final class AppStore: ObservableObject {
     }
     private var automationContext: AutomationContext {
         AutomationContext(entries: entries, configuration: configuration, settings: automationSettings,
-                          connection: calendarConnection, receipt: automationReceipt)
+                          connection: calendarConnection, receipt: automationReceipt, calendarVisibility: calendarVisibility)
     }
     private func automationOptionsChanged(_ old: AutomationSettings) {
         guard !loading else { return }
@@ -270,6 +328,7 @@ final class AppStore: ObservableObject {
         configuration = update.configuration
         configuration.highlightedDay = nil
         automationReceipt = update.receipt
+        calendarVisibility = update.calendarVisibility
         loading = false
         committingAutomation = true
         changed()
