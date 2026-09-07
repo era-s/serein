@@ -1,0 +1,35 @@
+{
+  "macOS": "26.6",
+  "version": "0.3.2",
+  "verifiedBuilds": [
+    5,
+    6
+  ],
+  "originalFailure": "Previously allowed ad-hoc code requirement did not match the updated executable; confirmed in tccd log.",
+  "explicitEventKitReconnectionSucceeded": true,
+  "applicationStatusAfterRestart": "Current-week calendar unchanged; waiting for calendar changes.",
+  "permissionPromptRepeatedAfterBuild6": false,
+  "actualBuildCDHashChanged": true,
+  "actualCertificateBoundRequirementPreserved": true,
+  "updatedBuildSatisfiesPreviouslyAuthorizedRequirement": true,
+  "currentWeekEntryCount": 30,
+  "calendarSelectionPreserved": true,
+  "manualEntriesPreserved": true,
+  "designPreserved": true,
+  "automationOptionsPreserved": true,
+  "studioSemanticsPreservedAcrossSignedUpdate": true,
+  "currentDayMarker": "2026-09-07",
+  "storedSpaces": 4,
+  "verifiedDesktopSlots": 15,
+  "allSlotsSameWallpaper": true,
+  "wallpaperFileExists": true,
+  "wallpaperChangedDuringRecovery": true,
+  "screenSaverContentPreserved": true,
+  "syntheticChecks": {
+    "calendar": 85,
+    "automation": 94,
+    "explicitRecovery": 43,
+    "stableSigning": 26
+  },
+  "privacy": "No calendar titles, account identifiers, personal wallpaper paths, signing keys or passwords are included."
+}
