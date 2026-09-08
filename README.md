@@ -75,14 +75,14 @@ open dist/Serein.app
 | 옵션 | 표시 |
 | --- | --- |
 | 순서 번호 | MON 01 · TUE 02처럼 요일 순서 |
-| 실제 날짜 | MON 09.07 · TUE 09.08처럼 연결한 주의 월·일 |
+| 실제 날짜 | MON 07 · TUE 08처럼 연결한 주의 일자만 |
 | 표시 안 함 | 숫자를 빼고 요일만 표시 |
 
 별도 선택 전에는 캘린더 연결 시 실제 날짜, 직접 입력한 시간표에는 순서 번호를 사용합니다. 명시적으로 선택한 옵션은 저장되어 재실행·캘린더 다시 가져오기·주간 자동 교체 후에도 유지됩니다. 실제 날짜는 캘린더가 연결되어 있어야 표시합니다.
 
 날짜는 현재 시간 대신 **시간표에 연결된 주와 시간대**로 계산합니다. 새 주를 가져오면 날짜가 함께 바뀌고, 주간 자동 교체가 꺼져 지난주를 유지하면 날짜도 지난주를 표시합니다. 월말·연말·윤년·서머타임을 처리하며, 시간표 제목이나 오늘 표시의 켜짐/꺼짐과 독립적입니다. 숫자를 숨겨도 오늘 테두리와 TODAY는 별도 옵션을 따릅니다.
 
-[옵션 화면](artifacts/weekday-options-demo.png) · [앱에서 저장한 PNG](artifacts/weekday-export-demo.png) · [실제 날짜 예시](artifacts/weekday-date-demo.png) · [순서 번호 예시](artifacts/weekday-ordinal-demo.png) · [숫자 없는 예시](artifacts/weekday-hidden-demo.png)
+[실제 날짜 예시](artifacts/weekday-day-only-demo.png) · [순서 번호 예시](artifacts/weekday-ordinal-demo.png) · [숫자 없는 예시](artifacts/weekday-hidden-demo.png)
 
 ## 캘린더 일정 숨기기
 
@@ -151,6 +151,7 @@ dist/Serein.app/Contents/MacOS/Serein --render-demo artifacts
 | [P006](docs/prompts/P006.md) | 전체 접근이 허용되어 있는데 자동화가 실패하는 문제 복구 | [개발 기록](docs/devlog.md) |
 | [P007](docs/prompts/P007.md) | 캘린더 일정 삭제 후 동기화에서 복원되는 문제, 반복 일정 숨김 유지 | [개발 기록](docs/devlog.md) |
 | [P008](docs/prompts/P008.md) | 요일 옆 실제 날짜·순서 번호·숫자 숨김 옵션 | [개발 기록](docs/devlog.md) |
+| [P009](docs/prompts/P009.md) | 실제 날짜를 두 자리 일자만 표시 | [개발 기록](docs/devlog.md) |
 
 ```sh
 git log --all --extended-regexp --grep='^Prompt-ID: P001$' --format='%h %s'

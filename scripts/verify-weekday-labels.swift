@@ -9,8 +9,8 @@ enum WeekdayLabelVerification {
     private static let zone = TimeZone(identifier: "Asia/Seoul")!
     private static let wednesday = date("2026-09-09T12:00:00+09:00")
     private static let nextMonday = date("2026-09-14T00:00:00+09:00")
-    private static let septemberWeek = ["09.07", "09.08", "09.09", "09.10", "09.11", "09.12", "09.13"]
-    private static let nextWeek = ["09.14", "09.15", "09.16", "09.17", "09.18", "09.19", "09.20"]
+    private static let septemberWeek = ["07", "08", "09", "10", "11", "12", "13"]
+    private static let nextWeek = ["14", "15", "16", "17", "18", "19", "20"]
 
     private static func date(_ text: String) -> Date { ISO8601DateFormatter().date(from: text)! }
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
@@ -31,17 +31,17 @@ enum WeekdayLabelVerification {
 
     private static func checkCalendarBoundaries() {
         let cases: [(String, String, [String], String)] = [
-            ("2026-08-31T00:00:00+09:00", "Asia/Seoul", ["08.31", "09.01", "09.02", "09.03", "09.04", "09.05", "09.06"], "month boundary"),
-            ("2026-12-28T00:00:00+09:00", "Asia/Seoul", ["12.28", "12.29", "12.30", "12.31", "01.01", "01.02", "01.03"], "year boundary"),
-            ("2028-02-28T00:00:00+09:00", "Asia/Seoul", ["02.28", "02.29", "03.01", "03.02", "03.03", "03.04", "03.05"], "leap day"),
-            ("2026-02-23T00:00:00+09:00", "Asia/Seoul", ["02.23", "02.24", "02.25", "02.26", "02.27", "02.28", "03.01"], "non-leap February"),
-            ("2026-03-02T00:00:00-05:00", "America/New_York", ["03.02", "03.03", "03.04", "03.05", "03.06", "03.07", "03.08"], "spring DST week"),
-            ("2026-10-26T00:00:00-04:00", "America/New_York", ["10.26", "10.27", "10.28", "10.29", "10.30", "10.31", "11.01"], "autumn DST week"),
-            ("2026-10-26T00:00:00+03:00", "Africa/Cairo", ["10.26", "10.27", "10.28", "10.29", "10.30", "10.31", "11.01"], "midweek backward DST transition")
+            ("2026-08-31T00:00:00+09:00", "Asia/Seoul", ["31", "01", "02", "03", "04", "05", "06"], "month boundary"),
+            ("2026-12-28T00:00:00+09:00", "Asia/Seoul", ["28", "29", "30", "31", "01", "02", "03"], "year boundary"),
+            ("2028-02-28T00:00:00+09:00", "Asia/Seoul", ["28", "29", "01", "02", "03", "04", "05"], "leap day"),
+            ("2026-02-23T00:00:00+09:00", "Asia/Seoul", ["23", "24", "25", "26", "27", "28", "01"], "non-leap February"),
+            ("2026-03-02T00:00:00-05:00", "America/New_York", ["02", "03", "04", "05", "06", "07", "08"], "spring DST week"),
+            ("2026-10-26T00:00:00-04:00", "America/New_York", ["26", "27", "28", "29", "30", "31", "01"], "autumn DST week"),
+            ("2026-10-26T00:00:00+03:00", "Africa/Cairo", ["26", "27", "28", "29", "30", "31", "01"], "midweek backward DST transition")
         ]
         for (start, timeZone, expected, label) in cases {
             expect(WeekdayHeaderDates.labels(weekStart: date(start), timeZoneID: timeZone) == expected,
-                   "Seven MM.dd labels remain correct through the \(label)")
+                   "Seven dd labels remain correct through the \(label)")
         }
         let cairo = TimeZone(identifier: "Africa/Cairo")!
         expect(cairo.secondsFromGMT(for: date("2026-10-26T00:00:00+03:00")) != cairo.secondsFromGMT(for: date("2026-11-01T00:00:00+02:00")),
@@ -60,7 +60,7 @@ enum WeekdayLabelVerification {
     private static func checkDefaultsAndSelections() throws {
         let automatic = effective(.init(), connection: connection())
         expect(automatic.weekdayNumberStyle == nil && automatic.weekdayDateLabels == septemberWeek
-               && WallpaperRenderer.weekdayNumber(for: 0, configuration: automatic) == "09.07",
+               && WallpaperRenderer.weekdayNumber(for: 0, configuration: automatic) == "07",
                "The automatic style shows the selected week's actual dates when a calendar is connected")
         expect(automatic.highlightedDay == nil && automatic.weekdayDateLabels != nil,
                "Date headers remain available when today's indicator is turned off")
@@ -79,7 +79,7 @@ enum WeekdayLabelVerification {
             switch style {
             case .date:
                 expect(configured.weekdayDateLabels == septemberWeek
-                       && WallpaperRenderer.weekdayNumber(for: 6, configuration: configured) == "09.13",
+                       && WallpaperRenderer.weekdayNumber(for: 6, configuration: configured) == "13",
                        "Explicit date style replaces stale labels with dates from the saved connection")
             case .ordinal:
                 expect(configured.weekdayDateLabels == nil

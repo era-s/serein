@@ -36,7 +36,7 @@ enum RendererVerification {
         return maxX < 0 ? nil : CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
     }
 
-    private static let dateLabels = ["09.07", "09.08", "09.09", "09.10", "09.11", "09.12", "09.13"]
+    private static let dateLabels = ["07", "08", "09", "10", "11", "12", "13"]
 
     private static func verifyWeekdayNumbers(original: Data, size: CGSize) throws {
         var ordinal = WallpaperConfiguration()
@@ -80,7 +80,7 @@ enum RendererVerification {
         hidden.highlightedDay = 2
         let datedToday = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: dates, size: size)
         let hiddenToday = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: hidden, size: size)
-        expect(WallpaperRenderer.weekdayNumber(for: 2, configuration: dates) == "09.09", "The highlighted day retains its actual date")
+        expect(WallpaperRenderer.weekdayNumber(for: 2, configuration: dates) == "09", "The highlighted day retains its actual date")
         expect(changedPixelBounds(datedToday, hiddenToday, within: CGRect(x: 414, y: 191, width: 33, height: 7)) != nil,
                "Date mode draws a separate small TODAY line below Wednesday's date")
         expect(hiddenToday != hiddenPNG, "Hidden number mode retains the visible today indicator")
@@ -88,12 +88,12 @@ enum RendererVerification {
         expect(todayDifference.minY >= 180 && todayDifference.maxY <= 200,
                "Date and hidden modes share the same today border and differ only inside weekday headers")
 
-        let malformed: [[String]?] = [nil, [], Array(dateLabels.prefix(6)), dateLabels + ["09.14"],
-                                     ["9.07"] + Array(dateLabels.dropFirst()),
-                                     ["09/07"] + Array(dateLabels.dropFirst()),
-                                     ["13.07"] + Array(dateLabels.dropFirst()),
-                                     ["02.30"] + Array(dateLabels.dropFirst()),
-                                     ["０９.０７"] + Array(dateLabels.dropFirst())]
+        let malformed: [[String]?] = [nil, [], Array(dateLabels.prefix(6)), dateLabels + ["14"],
+                                     ["7"] + Array(dateLabels.dropFirst()),
+                                     ["09.07"] + Array(dateLabels.dropFirst()),
+                                     ["00"] + Array(dateLabels.dropFirst()),
+                                     ["32"] + Array(dateLabels.dropFirst()),
+                                     ["０７"] + Array(dateLabels.dropFirst())]
         for (index, labels) in malformed.enumerated() {
             var invalid = dates
             invalid.weekdayDateLabels = labels

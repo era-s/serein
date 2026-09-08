@@ -317,7 +317,7 @@ struct StudioView: View {
                   let labels = WeekdayHeaderDates.labels(weekStart: connection.weekStart, timeZoneID: connection.timeZoneID) else {
                 return "캘린더를 연결하면 해당 주의 실제 날짜를 표시합니다."
             }
-            return "MON \(labels[0]) · TUE \(labels[1])처럼 연결한 주의 월·일을 표시합니다. 주가 바뀌면 날짜도 함께 갱신됩니다."
+            return "MON \(labels[0]) · TUE \(labels[1])처럼 연결한 주의 일자만 표시합니다. 주가 바뀌면 날짜도 함께 갱신됩니다."
         }
     }
 

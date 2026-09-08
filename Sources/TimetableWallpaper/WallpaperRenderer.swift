@@ -49,12 +49,9 @@ enum WallpaperRenderer {
 
     private static func validDateLabel(_ value: String) -> Bool {
         let bytes = Array(value.utf8)
-        guard bytes.count == 5, bytes[2] == 46,
-              [0, 1, 3, 4].allSatisfy({ (48...57).contains(bytes[$0]) }) else { return false }
-        let month = Int(bytes[0] - 48) * 10 + Int(bytes[1] - 48)
-        let day = Int(bytes[3] - 48) * 10 + Int(bytes[4] - 48)
-        let monthLengths = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-        return (1...12).contains(month) && (1...monthLengths[month - 1]).contains(day)
+        guard bytes.count == 2, bytes.allSatisfy({ (48...57).contains($0) }) else { return false }
+        let day = Int(bytes[0] - 48) * 10 + Int(bytes[1] - 48)
+        return (1...31).contains(day)
     }
 
     private static func makeImage(entries: [ScheduleEntry], configuration: WallpaperConfiguration, size: CGSize?) throws -> CGImage {

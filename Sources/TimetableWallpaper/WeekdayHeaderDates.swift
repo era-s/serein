@@ -16,7 +16,7 @@ enum WeekdayHeaderDates {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = calendar
         formatter.timeZone = zone
-        formatter.dateFormat = "MM.dd"
+        formatter.dateFormat = "dd"
         var result: [String] = []
         for offset in 0..<7 {
             guard let date = calendar.date(byAdding: .day, value: offset, to: day.start) else { return nil }

@@ -80,7 +80,7 @@ struct WallpaperConfiguration: Codable, Equatable, Sendable {
     /// Nil preserves an automatic default: supplied dates select date labels;
     /// an unconnected repeating timetable retains its original ordinal labels.
     var weekdayNumberStyle: WeekdayNumberStyle? = nil
-    /// Explicit Monday-through-Sunday MM.dd render inputs. The renderer never
+    /// Explicit Monday-through-Sunday dd render inputs. The renderer never
     /// derives these values from the clock, a title, or calendar permissions.
     var weekdayDateLabels: [String]? = nil
 

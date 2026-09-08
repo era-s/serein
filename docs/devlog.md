@@ -125,3 +125,11 @@ git log --all --extended-regexp --grep='^Prompt-ID: P002$' --format='%h %s'
 - 실제 UI: 예시 캘린더 5개 일정을 불러와 날짜 기본 선택, 숫자 숨김, 순서 번호 전환을 확인했다. [옵션 화면](../artifacts/weekday-options-demo.png), [실제 날짜](../artifacts/weekday-date-demo.png), [순서 번호](../artifacts/weekday-ordinal-demo.png), [숫자 숨김](../artifacts/weekday-hidden-demo.png). 저장 대화상자에서 만든 [3024×1964 PNG](../artifacts/weekday-export-demo.png)는 같은 예시의 자동 적용 PNG와 바이트가 같고 날짜·TODAY가 함께 표시됨을 시각 검토했다.
 - 실제 업데이트: 예시 실행 전후 개인 작업 파일과 시스템 배경화면 저장 바이트가 같았다. 일반 모드로 돌아와 기존 표시 일정·숨김 설정·디자인·자동화 옵션·선택 캘린더를 보존했고 추가 허용 요청 없이 날짜 배경화면을 적용했다. 실제 macOS의 **4개 Space / 15개 저장 항목** 모두 같은 새 PNG를 가리키며 화면 보호기 Content도 보존했다. ‘지금 확인’ 후에는 ‘이번 주 일정에 변경이 없습니다’로 정상 대기했고 마지막 적용 시간도 유지됐다. [개인 정보를 제외한 검증 JSON](../artifacts/weekday-label-verification.json).
 - 개인정보: 원본 캘린더에 쓰지 않았고 개인 일정·계정 화면·작업 백업·개인 배경화면 PNG는 Git에 포함하지 않았다. 이미지 기록은 고정된 예시 일정만 사용했다.
+
+
+## M013 · 실제 날짜를 일자만 표시 · 2026-09-08
+
+- 프롬프트: [P001](prompts/P001.md), [P002](prompts/P002.md), [P003](prompts/P003.md), [P004](prompts/P004.md), [P005](prompts/P005.md), [P006](prompts/P006.md), [P007](prompts/P007.md), [P008](prompts/P008.md), [P009](prompts/P009.md).
+- 결과: 실제 날짜의 형식을 `MM.dd`에서 `dd`로 바꿔 요일 옆에 **07, 08, 09**처럼 일자만 표시한다. [날짜 계산기](../Sources/TimetableWallpaper/WeekdayHeaderDates.swift), [렌더러](../Sources/TimetableWallpaper/WallpaperRenderer.swift), 디자인 설명을 함께 수정했다. 기존 주·시간대 계산, 오늘 표시, 옵션 저장 및 주간 제목은 유지한다. 앱은 **0.3.5(빌드 9)**이다.
+- 검증: 기존 날짜·옵션·주간 경계 **51개**, 렌더러 **69개** 모두 통과했다. 월말·연말·윤년·서머타임의 일자 전환과 두 자리 01–31 형식, 잘못된 형식의 제외를 검증했다. Release 빌드·패키징·엄격한 서명 검증 및 이전 허용 빌드의 서명 요구사항 검증도 통과했다. [3024×1964 합성 예시 PNG](../artifacts/weekday-day-only-demo.png)에서 MON 07부터 SUN 13, TUE 08과 TODAY 병기를 시각 확인했다.
+- 실제 업데이트: 재실행한 앱에서 `MON 07 · TUE 08` 안내와 실제 날짜 선택을 확인했다. 기존 개인 일정·숨김·디자인·자동화 옵션·선택 캘린더가 업데이트 전과 같았으며 별도 권한 요청 없이 새 이미지를 자동 적용했다. 실제 **4개 Space / 15개 저장 항목**이 모두 같은 새 PNG를 가리키고 파일이 존재함을 확인했다. 개인 일정과 실제 배경화면 PNG, 백업은 저장소에 포함하지 않았다.
