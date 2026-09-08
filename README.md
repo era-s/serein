@@ -21,7 +21,7 @@ open dist/Serein.app
 
 1. 왼쪽 **시간표 이미지 가져오기**를 누르거나 PNG/JPG/HEIC 이미지를 끌어다 놓습니다. **추가**로 직접 입력할 수도 있습니다.
 2. 인식 결과와 원본을 비교하고 과목을 클릭해 이름·요일·시작/종료 시간·장소를 수정합니다. 원본 이미지는 슬라이더로 최대 3배 확대할 수 있습니다. 확인 체크 후 선택한 일정을 반영합니다.
-3. **디자인**에서 Ember, Moss, Midnight 테마와 문구, 학기 제목, 장소 표시, 주말, 텍스처를 설정합니다.
+3. **디자인**에서 요일 옆 숫자(순서 번호·실제 날짜·표시 안 함), Ember, Moss, Midnight 테마와 문구, 시간표 제목, 장소 표시, 주말, 텍스처를 설정합니다.
 4. MacBook 해상도를 선택하고 **PNG 저장** 또는 **배경화면으로 설정**을 누릅니다. 기본 적용 범위는 **모든 데스크탑과 디스플레이**입니다. Desktop 1·2 등의 가상 데스크탑(Space)에도 같은 이미지가 적용됩니다.
 
 일정은 클릭해서 수정합니다. 직접 입력한 일정은 삭제하며, 캘린더 일정은 **배경화면에서 숨기기**로 제외합니다. 숨김은 동기화 뒤에도 유지합니다. 겹치는 일정은 같은 칸 안에 나란히 배치됩니다. 시간 범위와 주말은 입력 일정에 맞춰 자동 확장됩니다. 데스크탑 미리보기의 메뉴 막대와 Dock은 미리보기에만 표시됩니다.
@@ -68,6 +68,22 @@ open dist/Serein.app
 - macOS 26.6에서 실제 권한 복구 후 이번 주 일정 갱신과 4개 Space 전체 적용을 확인했습니다. 이어서 서명 해시가 다른 빌드 6으로 업데이트해도 추가 허용 요청 없이 자동화가 유지되었습니다. [권한 복구·업데이트 검증 결과](artifacts/calendar-recovery-verification.json).
 - [자동화 결과 PNG](artifacts/automation-wallpaper-demo.png) · [오늘 테두리 예시](artifacts/today-indicator-demo.png) · [빈 캘린더 연결 화면](artifacts/calendar-empty-demo.png)
 
+## 요일 옆 숫자
+
+**디자인 → 요일 옆 숫자**에서 선택합니다.
+
+| 옵션 | 표시 |
+| --- | --- |
+| 순서 번호 | MON 01 · TUE 02처럼 요일 순서 |
+| 실제 날짜 | MON 09.07 · TUE 09.08처럼 연결한 주의 월·일 |
+| 표시 안 함 | 숫자를 빼고 요일만 표시 |
+
+별도 선택 전에는 캘린더 연결 시 실제 날짜, 직접 입력한 시간표에는 순서 번호를 사용합니다. 명시적으로 선택한 옵션은 저장되어 재실행·캘린더 다시 가져오기·주간 자동 교체 후에도 유지됩니다. 실제 날짜는 캘린더가 연결되어 있어야 표시합니다.
+
+날짜는 현재 시간 대신 **시간표에 연결된 주와 시간대**로 계산합니다. 새 주를 가져오면 날짜가 함께 바뀌고, 주간 자동 교체가 꺼져 지난주를 유지하면 날짜도 지난주를 표시합니다. 월말·연말·윤년·서머타임을 처리하며, 시간표 제목이나 오늘 표시의 켜짐/꺼짐과 독립적입니다. 숫자를 숨겨도 오늘 테두리와 TODAY는 별도 옵션을 따릅니다.
+
+[옵션 화면](artifacts/weekday-options-demo.png) · [앱에서 저장한 PNG](artifacts/weekday-export-demo.png) · [실제 날짜 예시](artifacts/weekday-date-demo.png) · [순서 번호 예시](artifacts/weekday-ordinal-demo.png) · [숫자 없는 예시](artifacts/weekday-hidden-demo.png)
+
 ## 캘린더 일정 숨기기
 
 - 시간표에서 캘린더 일정을 열고 **배경화면에서 숨기기**를 누릅니다. 기본값은 **이후 반복 일정까지 계속 숨기기**입니다. 우클릭 메뉴에서 **이번 회차만 숨기기**도 선택할 수 있습니다.
@@ -94,6 +110,7 @@ Command Line Tools만 설치된 Mac에서도 실행할 수 있는 검증 스크�
 
 ```sh
 ./scripts/verify-renderer.sh
+./scripts/verify-weekday-labels.sh
 ./scripts/verify-ocr.sh
 ./scripts/verify-calendar.sh
 ./scripts/verify-automation.sh
@@ -114,7 +131,7 @@ dist/Serein.app/Contents/MacOS/Serein --render-demo artifacts
 
 자동화 예시는 `open dist/Serein.app --args --automation-demo`로 실행합니다. 세 옵션은 예시 캘린더와 고정된 수요일을 사용하고, 적용 시 임시 PNG만 저장합니다. 실제 배경화면·로그인 설정·저장된 작업은 변경하지 않습니다. 예시 모드를 끝내려면 앱을 종료하고 인자 없이 다시 엽니다.
 
-캘린더 변환·권한·비동기 상태 검증 85개, 자동화 94개, 명시적 권한 복구 43개, 숨김·반복·비동기 32개, 실제 AppStore 예시 통합 37개, 모든 Space 변환·저장·복구 366개는 합성 데이터와 테스트 provider로 수행했습니다. 렌더러 28개와 실제 Vision OCR을 포함한 47개 검사도 통과했습니다. EventKit 변환·조회 오류 흐름은 가짜 provider로 검증했고, 로그인 항목 등록은 개발 중 실행하지 않았습니다. 전체 Space 적용은 위의 실제 Mac 검증 결과를 참고하세요. UI에서는 예시 캘린더 조회·수정·반영·3024×1964 PNG 저장을 검증했습니다.
+캘린더 변환·권한·비동기 상태 검증 85개, 자동화 94개, 명시적 권한 복구 43개, 숨김·반복·비동기 32개, 실제 AppStore 예시 통합 37개, 모든 Space 변환·저장·복구 366개는 합성 데이터와 테스트 provider로 수행했습니다. 요일 날짜·옵션·주간 경계 51개, 렌더러 69개와 실제 Vision OCR을 포함한 47개 검사도 통과했습니다. EventKit 변환·조회 오류 흐름은 가짜 provider로 검증했고, 로그인 항목 등록은 개발 중 실행하지 않았습니다. 전체 Space 적용은 위의 실제 Mac 검증 결과를 참고하세요. UI에서는 예시 캘린더 조회·수정·반영·3024×1964 PNG 저장을 검증했습니다.
 
 - [Ember](artifacts/serein-ember.png) · [Moss](artifacts/serein-moss.png) · [Midnight](artifacts/serein-midnight.png)
 - [실제 OCR 검증 이미지](artifacts/ocr-fixture.png) · [인식 결과](artifacts/ocr-fixture.txt)
@@ -133,6 +150,7 @@ dist/Serein.app/Contents/MacOS/Serein --render-demo artifacts
 | [P005](docs/prompts/P005.md) | Desktop 2에만 적용되는 문제 해결, 모든 Space·디스플레이 적용 | [개발 기록](docs/devlog.md) |
 | [P006](docs/prompts/P006.md) | 전체 접근이 허용되어 있는데 자동화가 실패하는 문제 복구 | [개발 기록](docs/devlog.md) |
 | [P007](docs/prompts/P007.md) | 캘린더 일정 삭제 후 동기화에서 복원되는 문제, 반복 일정 숨김 유지 | [개발 기록](docs/devlog.md) |
+| [P008](docs/prompts/P008.md) | 요일 옆 실제 날짜·순서 번호·숫자 숨김 옵션 | [개발 기록](docs/devlog.md) |
 
 ```sh
 git log --all --extended-regexp --grep='^Prompt-ID: P001$' --format='%h %s'

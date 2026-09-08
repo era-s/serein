@@ -33,6 +33,30 @@ enum WallpaperRenderer {
         return data as Data
     }
 
+    /// The configured number/date before the separate TODAY marker is drawn.
+    /// A malformed date payload omits dates instead of inventing another week.
+    static func weekdayNumber(for day: Int, configuration: WallpaperConfiguration) -> String? {
+        guard (0...6).contains(day) else { return nil }
+        switch configuration.resolvedWeekdayNumberStyle {
+        case .ordinal: return String(format: "%02d", day + 1)
+        case .hidden: return nil
+        case .date:
+            guard let labels = configuration.weekdayDateLabels, labels.count == 7,
+                  labels.allSatisfy(validDateLabel) else { return nil }
+            return labels[day]
+        }
+    }
+
+    private static func validDateLabel(_ value: String) -> Bool {
+        let bytes = Array(value.utf8)
+        guard bytes.count == 5, bytes[2] == 46,
+              [0, 1, 3, 4].allSatisfy({ (48...57).contains(bytes[$0]) }) else { return false }
+        let month = Int(bytes[0] - 48) * 10 + Int(bytes[1] - 48)
+        let day = Int(bytes[3] - 48) * 10 + Int(bytes[4] - 48)
+        let monthLengths = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        return (1...12).contains(month) && (1...monthLengths[month - 1]).contains(day)
+    }
+
     private static func makeImage(entries: [ScheduleEntry], configuration: WallpaperConfiguration, size: CGSize?) throws -> CGImage {
         let requested = size ?? configuration.resolution.size
         guard requested.width.isFinite, requested.height.isFinite,
@@ -268,11 +292,21 @@ enum WallpaperRenderer {
                 let dayX = grid.minX + CGFloat(day) * dayWidth
                 text(ScheduleEntry.dayLabels[day], in: CGRect(x: dayX + 11, y: dividerY + 25, width: dayWidth - 22, height: 22),
                      font: mono(12), color: ink.withAlphaComponent(0.93), tracking: 2.2)
-                if day == highlightedDay {
+                let number = WallpaperRenderer.weekdayNumber(for: day, configuration: configuration)
+                if configuration.resolvedWeekdayNumberStyle == .date, let number {
+                    text(number, in: CGRect(x: dayX + dayWidth - 64, y: dividerY + 27, width: 50, height: 15),
+                         font: mono(9), color: ink.withAlphaComponent(day == highlightedDay ? 0.84 : 0.56), alignment: .right)
+                    if day == highlightedDay {
+                        text("TODAY", in: CGRect(x: dayX + dayWidth - 64, y: dividerY + 42, width: 50, height: 11),
+                             font: mono(6.5), color: ink.withAlphaComponent(0.74), alignment: .right, tracking: 1.0)
+                    }
+                } else if day == highlightedDay {
+                    // Ordinal mode retains the original pixels, while hidden or
+                    // invalid date labels still retain the user's TODAY marker.
                     text("TODAY", in: CGRect(x: dayX + dayWidth - 64, y: dividerY + 28, width: 50, height: 14),
                          font: mono(8), color: ink.withAlphaComponent(0.84), alignment: .right, tracking: 1.1)
-                } else {
-                    text(String(format: "%02d", day + 1), in: CGRect(x: dayX + dayWidth - 49, y: dividerY + 27, width: 35, height: 15),
+                } else if let number {
+                    text(number, in: CGRect(x: dayX + dayWidth - 49, y: dividerY + 27, width: 35, height: 15),
                          font: mono(9), color: ink.withAlphaComponent(0.43), alignment: .right)
                 }
             }

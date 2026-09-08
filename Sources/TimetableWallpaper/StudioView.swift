@@ -254,6 +254,18 @@ struct StudioView: View {
     private var designPanel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 10) {
+                    fieldLabel("DAY LABELS", "요일 옆 숫자")
+                    Picker("요일 옆 숫자", selection: Binding(
+                        get: { store.weekdayNumberStyle },
+                        set: { store.configuration.weekdayNumberStyle = $0 })) {
+                        ForEach(WeekdayNumberStyle.allCases) { style in
+                            Text(style.label).tag(style)
+                        }
+                    }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("weekday-number-style")
+                    Text(weekdayNumberDescription).font(.system(size: 10)).foregroundStyle(StudioStyle.muted).lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 VStack(alignment: .leading, spacing: 12) {
                     fieldLabel("COLOR STORY", "컬러 테마")
                     ForEach(WallpaperTheme.allCases) { theme in
@@ -293,6 +305,19 @@ struct StudioView: View {
                 }.toggleStyle(.switch).controlSize(.mini).font(.system(size: 11))
                 Text("주말 일정이 있으면 해당 요일은 자동으로 표시됩니다.").font(.system(size: 10)).foregroundStyle(StudioStyle.muted).lineSpacing(3)
             }.padding(.horizontal, 22).padding(.bottom, 16)
+        }
+    }
+
+    private var weekdayNumberDescription: String {
+        switch store.weekdayNumberStyle {
+        case .ordinal: return "MON 01 · TUE 02처럼 순서 번호를 표시합니다."
+        case .hidden: return "요일만 표시합니다. 오늘을 표시하는 옵션은 그대로 유지됩니다."
+        case .date:
+            guard let connection = store.calendarConnection,
+                  let labels = WeekdayHeaderDates.labels(weekStart: connection.weekStart, timeZoneID: connection.timeZoneID) else {
+                return "캘린더를 연결하면 해당 주의 실제 날짜를 표시합니다."
+            }
+            return "MON \(labels[0]) · TUE \(labels[1])처럼 연결한 주의 월·일을 표시합니다. 주가 바뀌면 날짜도 함께 갱신됩니다."
         }
     }
 

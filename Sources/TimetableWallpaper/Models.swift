@@ -53,6 +53,18 @@ enum WallpaperResolution: String, Codable, CaseIterable, Identifiable, Sendable 
     var dimensions: String { "\(Int(size.width)) × \(Int(size.height))" }
 }
 
+enum WeekdayNumberStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    case ordinal, date, hidden
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .ordinal: "순서 번호"
+        case .date: "실제 날짜"
+        case .hidden: "표시 안 함"
+        }
+    }
+}
+
 struct WallpaperConfiguration: Codable, Equatable, Sendable {
     var theme: WallpaperTheme = .ember
     var resolution: WallpaperResolution = .macbook14
@@ -65,4 +77,14 @@ struct WallpaperConfiguration: Codable, Equatable, Sendable {
     var endHour: Int = 18
     /// Explicit render input, 0=Monday ... 6=Sunday. Never read the clock in the renderer.
     var highlightedDay: Int? = nil
+    /// Nil preserves an automatic default: supplied dates select date labels;
+    /// an unconnected repeating timetable retains its original ordinal labels.
+    var weekdayNumberStyle: WeekdayNumberStyle? = nil
+    /// Explicit Monday-through-Sunday MM.dd render inputs. The renderer never
+    /// derives these values from the clock, a title, or calendar permissions.
+    var weekdayDateLabels: [String]? = nil
+
+    var resolvedWeekdayNumberStyle: WeekdayNumberStyle {
+        weekdayNumberStyle ?? (weekdayDateLabels == nil ? .ordinal : .date)
+    }
 }

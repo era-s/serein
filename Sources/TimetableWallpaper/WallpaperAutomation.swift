@@ -127,7 +127,7 @@ final class WallpaperAutomation: ObservableObject {
             (initialize || manualRefresh || (settings.refreshWeekly && differentWeek) ||
              (settings.refreshOnCalendarChange && !differentWeek))
         let shouldCheckAppearance = candidate.receipt != nil &&
-            (settings.showToday || request.trigger == .settingsChanged || request.trigger == .enabled)
+            (settings.showToday || request.trigger == .settingsChanged || request.trigger == .enabled || request.trigger == .launch || request.trigger == .wake)
 
         guard shouldFetch || shouldCheckAppearance else {
             status = waitingStatus(candidate, differentWeek: differentWeek)
@@ -192,7 +192,7 @@ final class WallpaperAutomation: ObservableObject {
             } else if shouldFetch {
                 reason = "변경된 이번 주 일정을 배경화면에 반영했습니다."
             } else {
-                reason = "배경화면의 오늘 표시를 갱신했습니다."
+                reason = "배경화면의 표시 설정을 갱신했습니다."
             }
 
             if var receipt = candidate.receipt, receipt.wallpaperFingerprint == fingerprint,
@@ -286,6 +286,11 @@ final class WallpaperAutomation: ObservableObject {
         timeZone: TimeZone) -> WallpaperConfiguration {
         var result = configuration
         result.highlightedDay = nil
+        result.weekdayDateLabels = nil
+        let numberStyle = configuration.weekdayNumberStyle ?? (connection == nil ? .ordinal : .date)
+        if numberStyle == .date, let connection {
+            result.weekdayDateLabels = WeekdayHeaderDates.labels(weekStart: connection.weekStart, timeZoneID: connection.timeZoneID) ?? []
+        }
         guard settings.showToday else { return result }
         let week = CalendarWeek(containing: now, timeZone: timeZone)
         if let connection,

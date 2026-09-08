@@ -2,7 +2,7 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
-verification_dir="$(mktemp -d "${TMPDIR:-/tmp}/serein-automation.XXXXXX")"
+verification_dir="$(mktemp -d "${TMPDIR:-/tmp}/serein-weekday-labels.XXXXXX")"
 trap 'rm -rf "$verification_dir"' EXIT
 
 swiftc \
@@ -14,6 +14,7 @@ swiftc \
   "$project_root/Sources/TimetableWallpaper/SavedStudio.swift" \
   "$project_root/Sources/TimetableWallpaper/WeekdayHeaderDates.swift" \
   "$project_root/Sources/TimetableWallpaper/WallpaperAutomation.swift" \
-  "$project_root/scripts/verify-automation.swift" \
-  -o "$verification_dir/verify-automation"
-"$verification_dir/verify-automation"
+  "$project_root/Sources/TimetableWallpaper/WallpaperRenderer.swift" \
+  "$project_root/scripts/verify-weekday-labels.swift" \
+  -o "$verification_dir/verify-weekday-labels"
+"$verification_dir/verify-weekday-labels"

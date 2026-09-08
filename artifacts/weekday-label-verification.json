@@ -1,0 +1,39 @@
+{
+  "version": "0.3.4",
+  "build": 8,
+  "checks": {
+    "weekdayLabels": 51,
+    "renderer": 69,
+    "automation": 94,
+    "calendarRecovery": 43,
+    "calendarVisibility": 32,
+    "realAppStoreDemo": 37
+  },
+  "nativeDemoModesVerified": [
+    "date",
+    "hidden",
+    "ordinal"
+  ],
+  "dateIncludesTodayLabel": true,
+  "nativeExportSize": [
+    3024,
+    1964
+  ],
+  "nativeExportMatchesAutomatedPNG": true,
+  "demoPreservedPersonalStudioBytes": true,
+  "demoPreservedSystemWallpaperStoreBytes": true,
+  "updatedSignatureSatisfiesPreviouslyAuthorizedRequirement": true,
+  "calendarPermissionPreservedAfterUpdate": true,
+  "actualCalendarStatusAfterUpdate": "Current week unchanged; waiting for calendar changes.",
+  "visibleEntriesPreserved": true,
+  "hiddenPreferencesPreserved": true,
+  "designPreferencesPreserved": true,
+  "automationOptionsPreserved": true,
+  "selectedCalendarsPreserved": true,
+  "newDateHeaderAppliedAutomatically": true,
+  "allSpaces": 4,
+  "allWallpaperSlots": 15,
+  "allSlotsReferenceSameExistingPNG": true,
+  "screenSaverContentPreserved": true,
+  "privacy": "No personal events, calendar IDs, accounts, private file paths or signing credentials included."
+}

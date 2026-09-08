@@ -85,6 +85,7 @@ final class AppStore: ObservableObject {
                 entries = saved.entries
                 configuration = saved.configuration
                 configuration.highlightedDay = nil
+                configuration.weekdayDateLabels = nil
                 automationSettings = saved.automation ?? AutomationSettings()
                 calendarConnection = saved.connection
                 automationReceipt = saved.receipt
@@ -304,6 +305,9 @@ final class AppStore: ObservableObject {
         WallpaperAutomation.effectiveConfiguration(configuration, settings: automationSettings,
             connection: calendarConnection, now: now, timeZone: .current)
     }
+    var weekdayNumberStyle: WeekdayNumberStyle {
+        configuration.weekdayNumberStyle ?? (calendarConnection == nil ? .ordinal : .date)
+    }
     private var automationContext: AutomationContext {
         AutomationContext(entries: entries, configuration: configuration, settings: automationSettings,
                           connection: calendarConnection, receipt: automationReceipt, calendarVisibility: calendarVisibility)
@@ -327,6 +331,7 @@ final class AppStore: ObservableObject {
         calendarConnection = update.connection
         configuration = update.configuration
         configuration.highlightedDay = nil
+        configuration.weekdayDateLabels = nil
         automationReceipt = update.receipt
         calendarVisibility = update.calendarVisibility
         loading = false

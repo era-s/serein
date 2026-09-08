@@ -184,8 +184,11 @@ enum AutomationVerification {
         let saved = SavedStudio(entries: ctx.entries, configuration: ctx.configuration,
                                 automation: ctx.settings, connection: ctx.connection, receipt: receipt)
         let restored = try JSONDecoder().decode(SavedStudio.self, from: JSONEncoder().encode(saved))
-        expect(restored.version == 3 && restored.isValid && restored.entries == ctx.entries && restored.configuration == ctx.configuration,
-               "A version 3 saved studio preserves valid entries and the deterministic render configuration")
+        var preferences = ctx.configuration
+        preferences.highlightedDay = nil
+        preferences.weekdayDateLabels = nil
+        expect(restored.version == 3 && restored.isValid && restored.entries == ctx.entries && restored.configuration == preferences,
+               "A version 3 saved studio preserves entries and render preferences without stale derived labels")
         expect(restored.automation == ctx.settings && restored.connection == ctx.connection && restored.receipt == receipt,
                "A version 3 saved studio preserves every automation switch, selected source, managed identity and receipt")
         var migrated = saved
@@ -313,6 +316,7 @@ enum AutomationVerification {
 
         var identicalContext = context(changes: false, weekly: true)
         identicalContext.connection?.includeWeekTitle = false
+        identicalContext.configuration.weekdayNumberStyle = .ordinal
         let identical = AutomationHarness(identicalContext)
         await identical.engine.check(trigger: .enabled, now: wednesday)
         identical.acceptLatest()

@@ -11,6 +11,7 @@ swiftc \
   "$project_root/Sources/TimetableWallpaper/CalendarEventConverter.swift" \
   "$project_root/Sources/TimetableWallpaper/CalendarVisibility.swift" \
   "$project_root/Sources/TimetableWallpaper/AutomationModels.swift" \
+  "$project_root/Sources/TimetableWallpaper/WeekdayHeaderDates.swift" \
   "$project_root/Sources/TimetableWallpaper/WallpaperAutomation.swift" \
   "$project_root/Sources/TimetableWallpaper/CalendarAccessRecovery.swift" \
   "$project_root/scripts/verify-calendar-recovery.swift" \

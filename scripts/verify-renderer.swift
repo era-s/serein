@@ -13,7 +13,7 @@ enum RendererVerification {
         print("PASS: \(message)")
     }
 
-    private static func changedPixelBounds(_ first: Data, _ second: Data) -> CGRect? {
+    private static func changedPixelBounds(_ first: Data, _ second: Data, within region: CGRect? = nil) -> CGRect? {
         guard let lhs = NSBitmapImageRep(data: first), let rhs = NSBitmapImageRep(data: second),
               lhs.pixelsWide == rhs.pixelsWide, lhs.pixelsHigh == rhs.pixelsHigh,
               lhs.bitsPerPixel == rhs.bitsPerPixel, lhs.bitsPerSample == 8,
@@ -24,6 +24,7 @@ enum RendererVerification {
         var minX = lhs.pixelsWide, minY = lhs.pixelsHigh, maxX = -1, maxY = -1
         for y in 0..<lhs.pixelsHigh {
             for x in 0..<lhs.pixelsWide {
+                if let region, !region.contains(CGPoint(x: x, y: y)) { continue }
                 let leftOffset = y * lhs.bytesPerRow + x * bytesPerPixel
                 let rightOffset = y * rhs.bytesPerRow + x * bytesPerPixel
                 if (0..<bytesPerPixel).contains(where: { left[leftOffset + $0] != right[rightOffset + $0] }) {
@@ -33,6 +34,91 @@ enum RendererVerification {
             }
         }
         return maxX < 0 ? nil : CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+    }
+
+    private static let dateLabels = ["09.07", "09.08", "09.09", "09.10", "09.11", "09.12", "09.13"]
+
+    private static func verifyWeekdayNumbers(original: Data, size: CGSize) throws {
+        var ordinal = WallpaperConfiguration()
+        ordinal.weekdayNumberStyle = .ordinal
+        let ordinalPNG = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: ordinal, size: size)
+        expect(ordinalPNG == original, "Explicit ordinal labels retain the old default wallpaper exactly")
+        ordinal.weekdayDateLabels = dateLabels
+        let ordinalWithDates = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: ordinal, size: size)
+        expect(ordinalPNG == ordinalWithDates, "An explicit ordinal preference ignores supplied calendar dates")
+
+        var dates = WallpaperConfiguration()
+        dates.weekdayNumberStyle = .date
+        dates.weekdayDateLabels = dateLabels
+        let datesPNG = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: dates, size: size)
+        let repeated = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: dates, size: size)
+        expect(datesPNG == repeated, "Explicit weekday dates produce identical PNG bytes on repeat rendering")
+        var automatic = dates
+        automatic.weekdayNumberStyle = nil
+        let automaticPNG = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: automatic, size: size)
+        expect(automaticPNG == datesPNG, "Supplied dates select actual dates when no preference was saved")
+        var hidden = dates
+        hidden.weekdayNumberStyle = .hidden
+        let hiddenPNG = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: hidden, size: size)
+        expect(Set([original, datesPNG, hiddenPNG]).count == 3, "Ordinal, actual dates and hidden numbers produce three distinct wallpapers")
+        for (name, image) in [("Date", datesPNG), ("Hidden", hiddenPNG)] {
+            guard let difference = changedPixelBounds(original, image) else { fatalError("\(name) labels changed no pixels") }
+            expect(difference.minY >= 180 && difference.maxY <= 200,
+                   "\(name) preference changes only the weekday header strip")
+        }
+
+        for day in 0...6 {
+            expect(WallpaperRenderer.weekdayNumber(for: day, configuration: dates) == dateLabels[day],
+                   "\(ScheduleEntry.dayLabels[day]) displays its explicit \(dateLabels[day]) date")
+        }
+        expect((0...6).allSatisfy { WallpaperRenderer.weekdayNumber(for: $0, configuration: hidden) == nil },
+               "Hidden mode suppresses all seven numeric labels")
+        expect(WallpaperRenderer.weekdayNumber(for: -1, configuration: dates) == nil && WallpaperRenderer.weekdayNumber(for: 7, configuration: dates) == nil,
+               "Out-of-range weekday lookups are ignored safely")
+
+        dates.highlightedDay = 2
+        hidden.highlightedDay = 2
+        let datedToday = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: dates, size: size)
+        let hiddenToday = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: hidden, size: size)
+        expect(WallpaperRenderer.weekdayNumber(for: 2, configuration: dates) == "09.09", "The highlighted day retains its actual date")
+        expect(changedPixelBounds(datedToday, hiddenToday, within: CGRect(x: 414, y: 191, width: 33, height: 7)) != nil,
+               "Date mode draws a separate small TODAY line below Wednesday's date")
+        expect(hiddenToday != hiddenPNG, "Hidden number mode retains the visible today indicator")
+        guard let todayDifference = changedPixelBounds(hiddenToday, datedToday) else { fatalError("Today's date changed no pixels") }
+        expect(todayDifference.minY >= 180 && todayDifference.maxY <= 200,
+               "Date and hidden modes share the same today border and differ only inside weekday headers")
+
+        let malformed: [[String]?] = [nil, [], Array(dateLabels.prefix(6)), dateLabels + ["09.14"],
+                                     ["9.07"] + Array(dateLabels.dropFirst()),
+                                     ["09/07"] + Array(dateLabels.dropFirst()),
+                                     ["13.07"] + Array(dateLabels.dropFirst()),
+                                     ["02.30"] + Array(dateLabels.dropFirst()),
+                                     ["０９.０７"] + Array(dateLabels.dropFirst())]
+        for (index, labels) in malformed.enumerated() {
+            var invalid = dates
+            invalid.weekdayDateLabels = labels
+            expect((0...6).allSatisfy { WallpaperRenderer.weekdayNumber(for: $0, configuration: invalid) == nil },
+                   "Malformed date payload \(index + 1) never substitutes an invented ordinal or date")
+            let invalidPNG = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: invalid, size: size)
+            expect(invalidPNG == hiddenToday, "Malformed date payload \(index + 1) renders safely and retains TODAY")
+        }
+
+        var weekendDates = dates
+        weekendDates.highlightedDay = nil
+        weekendDates.showWeekends = true
+        var weekendHidden = weekendDates
+        weekendHidden.weekdayNumberStyle = .hidden
+        let sevenDates = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: weekendDates, size: size)
+        let sevenHidden = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: weekendHidden, size: size)
+        // Sunday is the rightmost header at 756px, within the unchanged grid.
+        expect(changedPixelBounds(sevenDates, sevenHidden, within: CGRect(x: 630, y: 180, width: 70, height: 20)) != nil,
+               "A seven-day timetable paints Sunday's actual date")
+        let saved = try JSONEncoder().encode(dates)
+        let restored = try JSONDecoder().decode(WallpaperConfiguration.self, from: saved)
+        expect(restored == dates, "Weekday number preference and explicit render labels round-trip through Codable")
+        let legacy = try JSONDecoder().decode(WallpaperConfiguration.self, from: JSONEncoder().encode(WallpaperConfiguration()))
+        expect(legacy.weekdayNumberStyle == nil && legacy.weekdayDateLabels == nil && legacy.resolvedWeekdayNumberStyle == .ordinal,
+               "Existing configurations without weekday fields keep their original ordinal default")
     }
 
     static func main() throws {
@@ -47,6 +133,7 @@ enum RendererVerification {
         let equivalent = try WallpaperRenderer.pngData(entries: reordered, configuration: .init(), size: size)
         expect(original == repeated, "Identical inputs produce identical PNG bytes")
         expect(original == equivalent, "Entry order and UUID changes do not affect the wallpaper")
+        try verifyWeekdayNumbers(original: original, size: size)
         let tiedEvents = [
             ScheduleEntry(name: "Design lab", day: 0, startMinutes: 600, endMinutes: 780, location: "Room B", calendarSourceKey: "calendar-a"),
             ScheduleEntry(name: "Design lab", day: 0, startMinutes: 600, endMinutes: 780, location: "Room A", calendarSourceKey: "calendar-b"),
@@ -178,6 +265,16 @@ enum RendererVerification {
             today.highlightedDay = 2
             let todayPNG = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: today)
             try todayPNG.write(to: directory.appendingPathComponent("today-indicator-demo.png"))
+            for style in WeekdayNumberStyle.allCases {
+                var configuration = WallpaperConfiguration()
+                configuration.weekdayNumberStyle = style
+                configuration.weekdayDateLabels = dateLabels
+                configuration.subtitle = "2026.09.07 — 2026.09.13"
+                configuration.highlightedDay = 1
+                configuration.showWeekends = true
+                let png = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration)
+                try png.write(to: directory.appendingPathComponent("weekday-\(style.rawValue)-demo.png"))
+            }
             print("Review images saved to \(directory.path)")
         }
         print("Renderer verification completed: \(checks) checks passed.")
