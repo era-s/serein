@@ -7,3 +7,15 @@ dist/
 .env.*
 !.env.example
 artifacts/tmp/
+
+# Local user data and signing material must never enter the public repository.
+studio.json
+Wallpapers/
+WallpaperBackups/
+SereinDevelopmentSigning/
+*.keychain
+*.keychain-db
+*.p12
+*.pfx
+*.pem
+*.key
