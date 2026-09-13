@@ -143,3 +143,11 @@ git log --all --extended-regexp --grep='^Prompt-ID: P002$' --format='%h %s'
 - 문서: [영어 README](../README.md)와 [한국어 README](../README.ko.md)를 각각 65줄로 정리했다. 입력·테마·자동화·실행·개인정보를 중심으로 읽을 수 있고, 긴 설명은 [한국어 사용 가이드](guide.ko.md)와 [개발 가이드](DEVELOPMENT.md)로 옮겼다. 앱 UI가 한국어임과 로컬 개발 빌드임을 명시했다.
 - 이미지: [재생성 스크립트](../scripts/render-gallery.swift)로 프로덕션 렌더러를 호출해 [Ember](images/ember.jpg), [Moss](images/moss.jpg), [Midnight](images/midnight.jpg), [주말](images/weekend.jpg), [숫자 숨김](images/quiet.jpg), [겹치는 일정](images/overlap.jpg)을 만들었다. 모두 가상 일정·고정 날짜의 네이티브 3840×2160 출력이며 확대 보간 없이 고품질 JPEG로 저장했다. 실제 앱의 PNG 출력은 변경하지 않았다.
 - 검증: 갤러리 Swift 컴파일과 렌더링 성공, 이미지 6개 모두 4K 크기 확인. 대표 출력에서 날짜/TODAY·7일·숫자 숨김·한글·겹침 레이아웃을 시각 확인했다. 양 언어 README의 이미지 6개와 로컬 문서 링크 69개, 셸 문법, `git diff --check`를 검증했다. 앱 런타임 변경은 없으며 개인 작업·배경화면을 건드리지 않았다.
+
+
+## M015 · Serein 저장소 공개 완료 · 2026-09-13
+
+- 프롬프트: [P001](prompts/P001.md), [P002](prompts/P002.md), [P010](prompts/P010.md). 추가 확인에 따라 기존 작성자 이메일은 허용하고 실제 시간표 이미지는 제외했다.
+- 공개: 원래 저장소 이름을 **serein**으로 변경하고 [era-s/serein](https://github.com/era-s/serein)을 Public으로 전환했다. 원래 개발 커밋이 현재 이력의 조상임을 확인했으며 강제 푸시나 원래 이력 재작성은 하지 않았다. 앞서 만든 `serein-review-draft` 검토 복사본은 비공개로 남겨두었다.
+- 검증: GitHub API의 `isPrivate: false`, 로컬·원격 HEAD 일치, 로그인 없는 GitHub API 접근을 확인했다. 영어·한국어 README 2개와 4K 갤러리 이미지 6개를 인증 없이 내려받아 로컬 파일과 바이트가 같음을 확인했다. 두 README는 GitHub GFM 렌더링에서 각각 이미지 6개·표 3개가 생성됐다.
+- 개인정보: 새 이미지 6종은 실제 시간표나 개인 캘린더를 읽지 않고 가상 일정만으로 생성했다. 기존 이미지 24개도 검토했다. 개인 작업 파일·입력 사진·실제 캘린더 화면·서명 정보·원시 개인정보 감사 출력은 공개 저장소에 포함하지 않았다.

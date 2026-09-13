@@ -2,6 +2,8 @@
 
 Reviewed on **2026-09-13** for [P010](prompts/P010.md).
 
+**Published:** [era-s/serein](https://github.com/era-s/serein). The original repository was renamed and made public with its development history intact.
+
 ## Scope and findings
 
 | Area | Review result |
