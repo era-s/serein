@@ -1,0 +1,22 @@
+{
+  "spaces": 7,
+  "desktop_slots": 22,
+  "all_slots_same_image": true,
+  "image_exists": true,
+  "screensaver_content_preserved": true,
+  "image_changed": true,
+  "os_version": "27.0",
+  "os_build": "26A428",
+  "app_version": "0.3.6",
+  "app_build": "10",
+  "synthetic_assertions_passed": 524,
+  "regression_failed_before_fix": "unsupportedVersion(27)",
+  "release_build_passed": true,
+  "previous_signing_requirement_satisfied": true,
+  "schedule_design_hidden_preferences_and_automation_preserved": true,
+  "selected_calendars_preserved": true,
+  "automatic_apply_ui_success": true,
+  "manual_apply_ui_success": true,
+  "calendar_recheck_ui_success": true,
+  "contains_personal_schedule_data": false
+}

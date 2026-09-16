@@ -54,7 +54,7 @@ Demo mode uses fictional calendars and does not save over personal work. Automat
 
 - Calendar integration reads macOS-synced accounts through EventKit; there is no separate Google OAuth flow.
 - OCR results need review, especially with blurry images or tables lacking explicit time labels.
-- The all-Spaces path supports known macOS 14, 15, and 26 wallpaper-store formats. It backs up before writing and refuses unknown formats. This is not a public Apple API.
+- The all-Spaces path supports known macOS 14, 15, 26, and 27 wallpaper-store formats. It backs up before writing and refuses unknown formats. This is not a public Apple API.
 - Work is stored under `~/Library/Application Support/Serein/`; applied images and wallpaper-store backups stay there too. These are user data, not repository artifacts.
 - Rendering is deterministic for the same input, explicit date labels, settings, and macOS/font environment.
 

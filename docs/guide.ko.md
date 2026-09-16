@@ -98,8 +98,9 @@ open dist/Serein.app
 - OCR은 [Apple Vision](https://developer.apple.com/documentation/vision/vnrecognizetextrequest)으로 기기에서 처리합니다. 이미지와 시간표를 서버에 업로드하지 않습니다.
 - 명시된 요일·시간 행과 요일 열/시간축이 있는 격자형 시간표를 지원합니다. 격자 안에 수업 시간이 없으면 글자 위치를 이용해 시작 시간을 30분 단위로, 수업 길이를 기본 1시간으로 추정하므로 반드시 확인해야 합니다. 복잡한 표, 교시만 있는 표, 흐린 사진은 직접 수정하거나 추가해야 할 수 있습니다.
 - **모든 데스크탑과 디스플레이**는 기존 Space, 저장된 디스플레이별 항목, 새 Space가 참조할 기본값에 같은 PNG를 적용합니다. 수동 적용과 캘린더·주간·오늘 표시 자동 갱신이 같은 경로를 사용합니다. 개별 디스플레이를 고르면 해당 화면의 **현재 데스크탑만** 적용합니다.
-- macOS의 공개 API에는 모든 Space 일괄 적용 기능이 없어([Apple 엔지니어 답변](https://developer.apple.com/forums/thread/834630)), 전체 적용은 macOS 배경화면 저장 형식을 검증하고 원본 백업 후 갱신하는 호환 경로를 사용합니다. 화면 보호기 선택은 보존하고 WallpaperAgent를 다시 불러옵니다. 확인한 형식은 macOS 14·15·26이며, 알 수 없는 버전/형식에는 변경을 중단합니다. macOS 업데이트에 따라 이 경로의 호환성 보완이 필요할 수 있습니다.
+- macOS의 공개 API에는 모든 Space 일괄 적용 기능이 없어([Apple 엔지니어 답변](https://developer.apple.com/forums/thread/834630)), 전체 적용은 macOS 배경화면 저장 형식을 검증하고 원본 백업 후 갱신하는 호환 경로를 사용합니다. 화면 보호기 선택은 보존하고 WallpaperAgent를 다시 불러옵니다. 확인한 형식은 macOS 14·15·26·27이며, 알 수 없는 버전/형식에는 변경을 중단합니다. macOS 업데이트에 따라 이 경로의 호환성 보완이 필요할 수 있습니다.
 - 실제 macOS 26.6에서 기존 시간표 PNG를 **4개 Space 전체**에 적용하고, 재시작된 WallpaperAgent의 저장 항목 15개가 동일한 PNG를 가리키는 것을 확인했습니다. [개인 일정과 경로를 제외한 검증 결과](../artifacts/all-spaces-verification.json). macOS 14·15 경로는 합성 데이터로 검증했습니다.
+- macOS **27.0(26A428)**에서도 자동·수동 적용을 확인했으며 **7개 Space / 22개 저장 항목**이 같은 PNG를 가리켰습니다. [개인 정보를 제외한 검증 결과](../artifacts/macos27-verification.json).
 - 작업은 `~/Library/Application Support/Serein/studio.json`에 자동 저장합니다. 선택한 캘린더·자동화 옵션·적용 기록도 함께 저장하며, 저장 형식 v3에서 v1·v2의 적용 범위를 모든 데스크탑으로 옮기며, 사용자가 선택한 자동화 켜짐/꺼짐은 유지합니다. v1에 없던 자동화 옵션은 꺼짐으로 읽습니다. 적용한 PNG는 같은 디렉터리의 `Wallpapers`에 보존합니다. 같은 PNG는 파일을 재사용하고, 이전 파일은 다른 Space가 참조할 수 있어 유지합니다. 전체 적용 전 시스템 설정 원본은 `WallpaperBackups`에 로컬 백업하며 저장소에 올리지 않습니다. 손상된 작업 파일은 별도의 recovery 파일로 보관한 후 새 작업을 저장합니다.
 
 ## 검증과 예시 생성
@@ -129,7 +130,7 @@ dist/Serein.app/Contents/MacOS/Serein --render-demo artifacts
 
 자동화 예시는 `open dist/Serein.app --args --automation-demo`로 실행합니다. 세 옵션은 예시 캘린더와 고정된 수요일을 사용하고, 적용 시 임시 PNG만 저장합니다. 실제 배경화면·로그인 설정·저장된 작업은 변경하지 않습니다. 예시 모드를 끝내려면 앱을 종료하고 인자 없이 다시 엽니다.
 
-캘린더 변환·권한·비동기 상태 검증 85개, 자동화 94개, 명시적 권한 복구 43개, 숨김·반복·비동기 32개, 실제 AppStore 예시 통합 37개, 모든 Space 변환·저장·복구 366개는 합성 데이터와 테스트 provider로 수행했습니다. 요일 날짜·옵션·주간 경계 51개, 렌더러 69개와 실제 Vision OCR을 포함한 47개 검사도 통과했습니다. EventKit 변환·조회 오류 흐름은 가짜 provider로 검증했고, 로그인 항목 등록은 개발 중 실행하지 않았습니다. 전체 Space 적용은 위의 실제 Mac 검증 결과를 참고하세요. UI에서는 예시 캘린더 조회·수정·반영·3024×1964 PNG 저장을 검증했습니다.
+캘린더 변환·권한·비동기 상태 검증 85개, 자동화 94개, 명시적 권한 복구 43개, 숨김·반복·비동기 32개, 실제 AppStore 예시 통합 37개, 모든 Space 변환·저장·복구 524개는 합성 데이터와 테스트 provider로 수행했습니다. 요일 날짜·옵션·주간 경계 51개, 렌더러 69개와 실제 Vision OCR을 포함한 47개 검사도 통과했습니다. EventKit 변환·조회 오류 흐름은 가짜 provider로 검증했고, 로그인 항목 등록은 개발 중 실행하지 않았습니다. 전체 Space 적용은 위의 실제 Mac 검증 결과를 참고하세요. UI에서는 예시 캘린더 조회·수정·반영·3024×1964 PNG 저장을 검증했습니다.
 
 - [Ember](../artifacts/serein-ember.png) · [Moss](../artifacts/serein-moss.png) · [Midnight](../artifacts/serein-midnight.png)
 - [실제 OCR 검증 이미지](../artifacts/ocr-fixture.png) · [인식 결과](../artifacts/ocr-fixture.txt)

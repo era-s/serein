@@ -1,6 +1,6 @@
 import Foundation
 
-/// A pure, fail-closed adapter for known macOS 14, 15 and 26 wallpaper store
+/// A pure, fail-closed adapter for known macOS 14, 15, 26 and 27 wallpaper store
 /// formats. Reading, backing up and replacing the actual store belong to the
 /// desktop service; this type never touches the file system or running processes.
 enum WallpaperSpaceStore {
@@ -96,7 +96,7 @@ enum WallpaperSpaceStore {
             else { return false }
             if let shuffle = content["Shuffle"], (shuffle as? String) != "$null" { return false }
             let storedURL: String?
-            if osMajorVersion == 26 {
+            if osMajorVersion == 26 || osMajorVersion == 27 {
                 guard let configuration = choices[0]["Configuration"] as? Data,
                       let value = try? PropertyListSerialization.propertyList(from: configuration, options: [], format: nil),
                       let dictionary = value as? [String: Any], dictionary["type"] as? String == "imageFile",
@@ -113,7 +113,7 @@ enum WallpaperSpaceStore {
     }
 
     private static func validateVersion(_ version: Int) throws {
-        guard [14, 15, 26].contains(version) else { throw StoreError.unsupportedVersion(version) }
+        guard [14, 15, 26, 27].contains(version) else { throw StoreError.unsupportedVersion(version) }
     }
 
     private static func validateImageURL(_ url: URL) throws {
@@ -194,7 +194,7 @@ enum WallpaperSpaceStore {
         var content = desktop["Content"] as? [String: Any] ?? [:]
         let configuration: [String: Any]
         let files: [[String: Any]]
-        if osMajorVersion == 26 {
+        if osMajorVersion == 26 || osMajorVersion == 27 {
             configuration = ["type": "imageFile", "url": ["relative": imageURL.absoluteString]]
             files = []
             let options: [String: Any] = ["values": ["placement": ["picker": ["_0": ["id": "Crop"]]]]]

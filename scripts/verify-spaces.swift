@@ -90,7 +90,7 @@ enum SpaceStoreVerification {
         let desktop = dictionary(slot["Desktop"])
         let content = dictionary(desktop["Content"])
         guard let choices = content["Choices"] as? [[String: Any]], choices.count == 1 else { fatalError("Expected a single image choice") }
-        if os == 26 {
+        if os == 26 || os == 27 {
             let configuration = try decode(choices[0]["Configuration"] as! Data)
             expect(configuration["type"] as? String == "imageFile", "Modern desktop configuration identifies an image file")
             expect((choices[0]["Files"] as? [[String: Any]])?.isEmpty == true, "Modern image provider has no legacy file entries")
@@ -207,7 +207,7 @@ enum SpaceStoreVerification {
 
     private static func verifyFailures() throws {
         let input = try encode(fixture())
-        for os in [0, 13, 16, 25, 27, 99] {
+        for os in [0, 13, 16, 25, 28, 99] {
             expectThrows("Unsupported macOS \(os) is rejected before changing any data") {
                 _ = try WallpaperSpaceStore.replacingDesktop(in: input, imageURL: firstImage, now: moment, osMajorVersion: os)
             }
@@ -294,9 +294,9 @@ enum SpaceStoreVerification {
         try body(.init(directory: directory, image: image, store: store, backups: backups, original: original))
     }
 
-    private static func write(_ fixture: TransactionFixture, agent: FakeAgent) throws {
+    private static func write(_ fixture: TransactionFixture, agent: FakeAgent, os: Int) throws {
         try WallpaperStoreWriter.apply(imageURL: fixture.image, storeURL: fixture.store,
-                                       backupDirectory: fixture.backups, osMajorVersion: 26,
+                                       backupDirectory: fixture.backups, osMajorVersion: os,
                                        agent: agent, now: moment)
     }
 
@@ -304,12 +304,12 @@ enum SpaceStoreVerification {
         (try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as! NSNumber).intValue
     }
 
-    private static func verifyTransactions() throws {
+    private static func verifyTransactions(os: Int) throws {
         try withTransaction { fixture in
             let agent = FakeAgent()
-            try write(fixture, agent: agent)
+            try write(fixture, agent: agent, os: os)
             let output = try Data(contentsOf: fixture.store)
-            expect(try WallpaperSpaceStore.hasDesktop(fixture.image, in: output, osMajorVersion: 26), "Transaction writes the wallpaper to every stored desktop")
+            expect(try WallpaperSpaceStore.hasDesktop(fixture.image, in: output, osMajorVersion: os), "Transaction writes the wallpaper to every stored desktop")
             expect(agent.suspendCount == 1 && agent.reloadCount == 1 && agent.resumeCount == 1, "Successful transaction suspends, reloads and resumes the injected agent")
             expect(try permissions(fixture.store) == 0o640, "Atomic replacement retains original store permissions")
             let backups = try FileManager.default.contentsOfDirectory(at: fixture.backups, includingPropertiesForKeys: nil)
@@ -326,7 +326,7 @@ enum SpaceStoreVerification {
             let malformed = Data("not a property list".utf8)
             try malformed.write(to: fixture.store)
             let agent = FakeAgent()
-            expectThrows("Malformed store is rejected before suspending the agent") { try write(fixture, agent: agent) }
+            expectThrows("Malformed store is rejected before suspending the agent") { try write(fixture, agent: agent, os: os) }
             expect(agent.suspendCount == 0 && agent.resumeCount == 0 && agent.reloadCount == 0, "Malformed preflight never interacts with an agent")
             expect(try Data(contentsOf: fixture.store) == malformed, "Malformed preflight leaves original bytes untouched")
             expect(!FileManager.default.fileExists(atPath: fixture.backups.path), "Malformed preflight does not create a misleading backup")
@@ -335,7 +335,7 @@ enum SpaceStoreVerification {
         try withTransaction { fixture in
             try FileManager.default.removeItem(at: fixture.image)
             let agent = FakeAgent()
-            expectThrows("Missing image is rejected before suspending the agent") { try write(fixture, agent: agent) }
+            expectThrows("Missing image is rejected before suspending the agent") { try write(fixture, agent: agent, os: os) }
             expect(agent.suspendCount == 0 && agent.resumeCount == 0 && agent.reloadCount == 0, "Missing image never interacts with an agent")
             expect(try Data(contentsOf: fixture.store) == fixture.original, "Missing image leaves the store unchanged")
         }
@@ -343,7 +343,7 @@ enum SpaceStoreVerification {
         try withTransaction { fixture in
             let agent = FakeAgent()
             agent.onSuspend = { throw InjectedError.suspend }
-            expectThrows("Suspension failure aborts the transaction") { try write(fixture, agent: agent) }
+            expectThrows("Suspension failure aborts the transaction") { try write(fixture, agent: agent, os: os) }
             expect(agent.suspendCount == 1 && agent.resumeCount == 1 && agent.reloadCount == 0, "Suspension failure still resumes any partially suspended agent")
             expect(try Data(contentsOf: fixture.store) == fixture.original, "Suspension failure leaves the original store unchanged")
             expect(!FileManager.default.fileExists(atPath: fixture.backups.path), "Suspension failure performs no file transaction")
@@ -352,7 +352,7 @@ enum SpaceStoreVerification {
         try withTransaction { fixture in
             let agent = FakeAgent()
             agent.onReload = { invocation in if invocation == 1 { throw InjectedError.reload } }
-            expectThrows("Reload failure is reported") { try write(fixture, agent: agent) }
+            expectThrows("Reload failure is reported") { try write(fixture, agent: agent, os: os) }
             expect(try Data(contentsOf: fixture.store) == fixture.original, "Reload failure rolls back the exact bytes written by this transaction")
             expect(try permissions(fixture.store) == 0o640, "Rollback retains original store permissions")
             expect(agent.reloadCount == 2 && agent.resumeCount == 1, "Rollback reloads the restored store and resumes the agent")
@@ -363,24 +363,24 @@ enum SpaceStoreVerification {
 
         try withTransaction { fixture in
             let external = try WallpaperSpaceStore.replacingDesktop(in: fixture.original, imageURL: secondImage,
-                                                                   now: moment.addingTimeInterval(1), osMajorVersion: 26)
+                                                                   now: moment.addingTimeInterval(1), osMajorVersion: os)
             let agent = FakeAgent()
             agent.onReload = { _ in
                 try external.write(to: fixture.store, options: .atomic)
                 throw InjectedError.reload
             }
-            expectThrows("Reload failure after an external edit is reported") { try write(fixture, agent: agent) }
+            expectThrows("Reload failure after an external edit is reported") { try write(fixture, agent: agent, os: os) }
             expect(try Data(contentsOf: fixture.store) == external, "Rollback never overwrites an intervening external change")
             expect(agent.reloadCount == 1 && agent.resumeCount == 1, "External edit is preserved without a second rollback reload")
         }
 
         try withTransaction { fixture in
             let external = try WallpaperSpaceStore.replacingDesktop(in: fixture.original, imageURL: secondImage,
-                                                                   now: moment.addingTimeInterval(1), osMajorVersion: 26)
+                                                                   now: moment.addingTimeInterval(1), osMajorVersion: os)
             let agent = FakeAgent()
             agent.onReload = { _ in try external.write(to: fixture.store, options: .atomic) }
             var verificationFailed = false
-            do { try write(fixture, agent: agent) }
+            do { try write(fixture, agent: agent, os: os) }
             catch WallpaperStoreWriter.WriteError.verificationFailed { verificationFailed = true }
             expect(verificationFailed, "A successful reload that leaves another wallpaper fails post-reload verification")
             expect(try Data(contentsOf: fixture.store) == external, "Post-reload verification failure preserves the intervening valid store")
@@ -392,7 +392,7 @@ enum SpaceStoreVerification {
             // independent of the invoking account's directory permissions.
             try Data("block backup creation".utf8).write(to: fixture.backups)
             let agent = FakeAgent()
-            expectThrows("Backup directory failure aborts before replacing the store") { try write(fixture, agent: agent) }
+            expectThrows("Backup directory failure aborts before replacing the store") { try write(fixture, agent: agent, os: os) }
             expect(try Data(contentsOf: fixture.store) == fixture.original, "Backup failure leaves the original store unchanged")
             expect(agent.suspendCount == 1 && agent.resumeCount == 1 && agent.reloadCount == 0, "Backup failure resumes the agent without reloading")
         }
@@ -401,17 +401,17 @@ enum SpaceStoreVerification {
             let altered = Data("external unsupported format".utf8)
             let agent = FakeAgent()
             agent.onSuspend = { try altered.write(to: fixture.store) }
-            expectThrows("Store is validated again after suspension") { try write(fixture, agent: agent) }
+            expectThrows("Store is validated again after suspension") { try write(fixture, agent: agent, os: os) }
             expect(try Data(contentsOf: fixture.store) == altered, "A newly unsupported store is not overwritten using stale preflight bytes")
             expect(agent.resumeCount == 1 && agent.reloadCount == 0, "Second validation failure resumes the agent without reloading")
         }
     }
 
     static func main() throws {
-        for os in [14, 15, 26] { try verifyAllDestinations(os: os) }
+        for os in [27, 14, 15, 26] { try verifyAllDestinations(os: os) }
         try verifyMigration()
         try verifyFailures()
-        try verifyTransactions()
+        for os in [26, 27] { try verifyTransactions(os: os) }
         print("Verified \(checks) all-spaces wallpaper assertions using synthetic data and a fake agent only.")
     }
 }
