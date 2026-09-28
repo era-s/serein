@@ -1,0 +1,16 @@
+{
+  "app_version": "0.3.7",
+  "build": 11,
+  "integration_checks_passed": 41,
+  "automation_checks_passed": 94,
+  "closed_activation_policy": "accessory",
+  "reopened_activation_policy": "regular",
+  "command_q_terminates": true,
+  "calendar_status_after_reopen": "waiting_without_error",
+  "previous_signing_requirement_satisfied": true,
+  "settings_and_schedules_preserved": true,
+  "idle_observation_seconds": 70,
+  "idle_cpu_time_delta_seconds": 0.12,
+  "battery_savings_measured": false,
+  "personal_data_included": false
+}

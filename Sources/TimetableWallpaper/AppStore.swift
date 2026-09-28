@@ -51,6 +51,8 @@ final class AppStore: ObservableObject {
         }, onStateChange: { [weak self] update in self?.acceptAutomation(update) })
     }()
     private var renderTask: Task<Void, Never>?
+    private var studioVisible = true
+    private var previewFingerprint: String?
     private var loading = true
     private var autosaveEnabled = true
 
@@ -129,6 +131,7 @@ final class AppStore: ObservableObject {
             scheduleCheck(.settingsChanged, delay: 0.5)
         }
         renderTask?.cancel()
+        guard studioVisible else { return }
         renderTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(160))
             guard !Task.isCancelled else { return }
@@ -136,11 +139,23 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func setStudioVisible(_ visible: Bool) {
+        studioVisible = visible
+        if visible { refreshPreview() }
+        else { renderTask?.cancel() }
+    }
+
     func refreshPreview() {
+        guard studioVisible else { return }
+        let effective = effectiveConfiguration
+        let fingerprint = WallpaperAutomation.fingerprint(entries: entries,
+            configuration: effective, targetDisplayID: "preview")
+        guard preview == nil || previewFingerprint != fingerprint else { return }
         let size = configuration.resolution.size
         do {
-            preview = try WallpaperRenderer.render(entries: entries, configuration: effectiveConfiguration,
+            preview = try WallpaperRenderer.render(entries: entries, configuration: effective,
                 size: CGSize(width: 1600, height: 1600 * size.height / size.width))
+            previewFingerprint = fingerprint
         } catch { self.error = "미리보기를 만들지 못했습니다. \(error.localizedDescription)" }
     }
 
@@ -375,6 +390,13 @@ final class AppStore: ObservableObject {
         }
     }
     private func scheduleCheck(_ trigger: AutomationTrigger, delay: Double) {
+        guard automationSettings.hasAutomation else {
+            checkTask?.cancel()
+            scheduledTrigger = nil
+            return
+        }
+        // Ignore unrelated store notifications without cancelling a pending enable.
+        if trigger == .calendarChanged && !automationSettings.refreshOnCalendarChange { return }
         checkTask?.cancel()
         // Explicit enable/scope changes must survive timer events during debounce.
         let selectedTrigger: AutomationTrigger
@@ -399,9 +421,6 @@ final class AppStore: ObservableObject {
         automation.configure(automationContext)
         automation.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &observers)
         calendarRecovery.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &observers)
-        Timer.publish(every: 60, on: .main, in: .common).autoconnect().sink { [weak self] _ in
-            self?.scheduleCheck(.clock, delay: 0)
-        }.store(in: &observers)
         NotificationCenter.default.publisher(for: .EKEventStoreChanged).receive(on: RunLoop.main).sink { [weak self] _ in
             self?.scheduleCheck(.calendarChanged, delay: 1)
         }.store(in: &observers)
@@ -411,7 +430,8 @@ final class AppStore: ObservableObject {
                 self.automation.configure(self.automationContext)
                 self.scheduleCheck(.wake, delay: 0.3)
             }.store(in: &observers)
-        for name in [NSApplication.didBecomeActiveNotification, NSNotification.Name.NSCalendarDayChanged] {
+        for name in [NSApplication.didBecomeActiveNotification, NSNotification.Name.NSCalendarDayChanged,
+                     Notification.Name.NSSystemClockDidChange] {
             NotificationCenter.default.publisher(for: name).receive(on: RunLoop.main).sink { [weak self] _ in
                 self?.refreshLoginStatus()
                 self?.refreshCalendarAccess()

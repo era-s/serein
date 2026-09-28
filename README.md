@@ -41,7 +41,7 @@ Three independent options, all off by default:
 - **Weekly refresh:** switch to the new week on Monday, or catch up when the app resumes.
 - **Today:** add a subtle border that moves with the date.
 
-Hidden recurring events stay hidden through sync and future weeks. Serein keeps working in the menu bar after its window closes; quitting the app stops updates. Launch at login is optional.
+Hidden recurring events stay hidden through sync and future weeks. Closing the window hides Serein from the Dock and keeps it in the menu bar; quitting stops updates. Background updates use system notifications instead of minute-by-minute polling. Launch at login is optional.
 
 ## Run on your Mac
 

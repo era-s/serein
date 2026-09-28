@@ -110,7 +110,7 @@ struct AutomationSettingsView: View {
                     VStack(alignment: .leading, spacing: 9) {
                         Toggle("로그인할 때 Serein 실행", isOn: Binding(get: { store.loginEnabled }, set: { store.setLoginEnabled($0) }))
                             .font(.system(size: 11)).toggleStyle(.switch).controlSize(.small)
-                        Text("창을 닫아도 메뉴 막대에서 작동합니다. 앱을 종료한 동안에는 갱신하지 않습니다.")
+                        Text("창을 닫으면 Dock에서 숨기고 메뉴 막대에서 작동합니다. 앱을 종료한 동안에는 갱신하지 않습니다.")
                             .font(.system(size: 10)).foregroundStyle(StudioStyle.muted).lineSpacing(3)
                         if store.loginNeedsApproval {
                             Button("시스템 설정에서 로그인 항목 허용", action: store.openLoginSettings)

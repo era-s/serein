@@ -14,7 +14,7 @@ To use your own Apple development identity, set `SEREIN_SIGN_IDENTITY` and, opti
 
 ## Verification
 
-The standalone checks work with Command Line Tools:
+The standalone checks use the selected Swift toolchain. If the macOS 27 Command Line Tools report a missing `SwiftUIMacros` plugin, run the build or check with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` to use an installed full Xcode without changing the system default:
 
 ```sh
 ./scripts/verify-renderer.sh

@@ -36,6 +36,7 @@ struct WallpaperApp: App {
             StudioView().environmentObject(store)
                 .frame(minWidth: 1080, minHeight: 740)
                 .preferredColorScheme(.light)
+                .background(StudioWindowLifecycle(onVisibility: store.setStudioVisible))
                 .onAppear { NSApp.activate(ignoringOtherApps: true) }
         }
         .defaultSize(width: 1320, height: 870)
@@ -76,6 +77,7 @@ private struct AutomationMenu: View {
         Button("Serein 종료") { NSApp.terminate(nil) }.keyboardShortcut("q")
     }
     private func showStudio() {
+        NSApp.setActivationPolicy(.regular)
         openWindow(id: "studio")
         NSApp.activate(ignoringOtherApps: true)
     }

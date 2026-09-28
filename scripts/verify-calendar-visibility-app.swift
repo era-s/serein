@@ -42,6 +42,24 @@ struct CalendarVisibilityAppVerification {
             try check(store.calendarConnection != nil, "Demo calendar connection is available")
             try check(store.calendarVisibility.exclusions.isEmpty, "Demo starts without hidden events")
 
+            // Rechecking unchanged inputs must reuse the preview, not render again.
+            store.refreshPreview()
+            let initialPreview = store.preview
+            store.refreshPreview()
+            try check(store.preview === initialPreview, "Unchanged render inputs reuse the preview image")
+
+            store.setStudioVisible(false)
+            store.configuration.title = "Changed while closed"
+            store.refreshPreview()
+            try await Task.sleep(for: .milliseconds(250))
+            try check(store.preview === initialPreview, "Closed studio does not render after a design change")
+            store.setStudioVisible(true)
+            try check(store.preview !== initialPreview, "Reopening renders the latest design")
+            let reopenedPreview = store.preview
+            store.setStudioVisible(false)
+            store.setStudioVisible(true)
+            try check(store.preview === reopenedPreview, "Reopening unchanged work reuses the preview")
+
             let provider = DemoCalendarProvider()
             let zone = TimeZone(identifier: "Asia/Seoul")!
             let week = CalendarWeek(containing: store.now, timeZone: zone)
