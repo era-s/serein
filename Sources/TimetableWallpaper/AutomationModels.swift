@@ -38,8 +38,9 @@ struct AutomationContext {
     var timeZone: TimeZone = .current
 }
 
-enum AutomationTrigger {
+enum AutomationTrigger: Hashable {
     case enabled, settingsChanged, calendarChanged, clock, wake, launch, manual
+    case activated, displayChanged, timeChanged, permissionRecovered
 }
 
 struct AutomationUpdate {

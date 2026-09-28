@@ -20,9 +20,16 @@ final class WallpaperAutomation: ObservableObject {
     private var worker: Task<Void, Never>?
     private var pending: Request?
     private var active: Request?
+    // Retained until a current query is successfully committed. This is separate
+    // from the receipt: its day key describes image application, not a fetch.
+    private var calendarRefreshReasons: Set<AutomationTrigger> = []
+    // Explicit enable can replace an older snapshot, but only for the week the
+    // user enabled. Appearance edits retain it; opt-out and source changes revoke it.
+    private var enabledRefreshWeek: CalendarWeek?
+    private var observedAccess: CalendarAccess
 
     private struct Request {
-        var trigger: AutomationTrigger
+        var triggers: Set<AutomationTrigger>
         var now: Date
         var configurationVersion: UInt64
     }
@@ -31,46 +38,79 @@ final class WallpaperAutomation: ObservableObject {
          apply: @escaping (AutomationUpdate) throws -> Void,
          onStateChange: ((AutomationUpdate) -> Void)? = nil) {
         self.provider = provider
+        observedAccess = provider.access
         self.apply = apply
         self.onStateChange = onStateChange
     }
 
-    /// User edits invalidate any awaited query, including its pending rerun.
-    /// The owner can explicitly schedule a fresh check with the new context.
+    /// User edits reject awaited results but retain unresolved calendar work for
+    /// the same source and date range. A changed selection must start fresh.
     func configure(_ context: AutomationContext) {
+        let sameScope = self.context.map {
+            $0.connection?.calendarIDs == context.connection?.calendarIDs &&
+            $0.connection?.weekStart == context.connection?.weekStart &&
+            $0.connection?.timeZoneID == context.connection?.timeZoneID &&
+            $0.timeZone == context.timeZone
+        } ?? false
         generation &+= 1
         configurationVersion &+= 1
-        pending = nil
+        if sameScope, context.settings.hasCalendarAutomation {
+            let oldSettings = self.context?.settings
+            var revokedReasons = Set<AutomationTrigger>()
+            if oldSettings?.refreshOnCalendarChange == true && !context.settings.refreshOnCalendarChange {
+                revokedReasons.formUnion([.calendarChanged, .launch, .wake, .timeChanged])
+            }
+            if (oldSettings?.refreshOnCalendarChange == true && !context.settings.refreshOnCalendarChange) ||
+                (oldSettings?.refreshWeekly == true && !context.settings.refreshWeekly) {
+                revokedReasons.insert(.enabled)
+            }
+            calendarRefreshReasons.subtract(revokedReasons)
+            if revokedReasons.contains(.enabled) { enabledRefreshWeek = nil }
+            pending?.triggers.subtract(revokedReasons)
+            pending?.configurationVersion = configurationVersion
+        } else {
+            pending = nil
+            calendarRefreshReasons = []
+            enabledRefreshWeek = nil
+        }
         self.context = context
-        lastAppliedAt = context.receipt?.appliedAt
-        status = idleStatus(context)
+        if lastAppliedAt != context.receipt?.appliedAt { lastAppliedAt = context.receipt?.appliedAt }
+        setStatus(idleStatus(context))
     }
 
-    /// A single worker drains the latest request. New notifications invalidate
-    /// in-flight results and retain one rerun, so changes during a fetch cannot
-    /// be lost or allow an older response to overwrite a newer one.
     func check(trigger: AutomationTrigger, now: Date = Date()) async {
+        await check(triggers: [trigger], now: now)
+    }
+
+    /// Both the owner's debounce and this worker union reasons. An appearance
+    /// edit can never replace a calendar notification that still needs a fetch.
+    func check(triggers: Set<AutomationTrigger>, now: Date = Date()) async {
         guard let context, context.settings.hasAutomation else {
-            status = "자동 배경화면 교체가 꺼져 있습니다."
+            setStatus("자동 배경화면 교체가 꺼져 있습니다.")
             return
         }
-        generation &+= 1
-        let previous = pending ?? active
-        let mergedTrigger: AutomationTrigger
-        if previous?.configurationVersion == configurationVersion,
-           previous?.trigger == .enabled {
-            mergedTrigger = .enabled
-        } else if trigger == .enabled {
-            mergedTrigger = .enabled
-        } else if trigger == .manual || (previous?.configurationVersion == configurationVersion && previous?.trigger == .manual) {
-            mergedTrigger = .manual
-        } else if previous?.configurationVersion == configurationVersion,
-                  previous?.trigger == .settingsChanged {
-            mergedTrigger = .settingsChanged
-        } else {
-            mergedTrigger = trigger
+        let access = provider.access
+        if access == .authorized, observedAccess != .authorized {
+            calendarRefreshReasons.insert(.permissionRecovered)
         }
-        pending = Request(trigger: mergedTrigger, now: now, configurationVersion: configurationVersion)
+        observedAccess = access
+        if context.settings.hasCalendarAutomation {
+            if triggers.contains(.enabled) {
+                enabledRefreshWeek = CalendarWeek(containing: now, timeZone: context.timeZone)
+            }
+            let explicitFetch: Set<AutomationTrigger> = [.enabled, .manual, .permissionRecovered]
+            calendarRefreshReasons.formUnion(triggers.intersection(explicitFetch))
+            if context.settings.refreshOnCalendarChange {
+                let recoveryOrChange: Set<AutomationTrigger> = [.calendarChanged, .launch, .wake, .timeChanged]
+                calendarRefreshReasons.formUnion(triggers.intersection(recoveryOrChange))
+            }
+        }
+        generation &+= 1
+        var merged = triggers
+        if let previous = pending ?? active, previous.configurationVersion == configurationVersion {
+            merged.formUnion(previous.triggers)
+        }
+        pending = Request(triggers: merged, now: now, configurationVersion: configurationVersion)
         if worker == nil {
             isChecking = true
             // This unstructured task owns the drain. Cancellation of one caller
@@ -102,15 +142,15 @@ final class WallpaperAutomation: ObservableObject {
               revision == generation else { return }
         let settings = candidate.settings
         guard let target = settings.targetDisplayID, !target.isEmpty else {
-            status = "자동 적용할 디스플레이를 선택해주세요."
+            setStatus("자동 적용할 디스플레이를 선택해주세요.")
             return
         }
         if settings.hasCalendarAutomation, candidate.connection == nil {
-            status = "캘린더에서 가져오기를 열고 자동 교체할 캘린더를 연결해주세요."
+            setStatus("캘린더에서 가져오기를 열고 자동 교체할 캘린더를 연결해주세요.")
             return
         }
         if !settings.hasCalendarAutomation, candidate.receipt == nil {
-            status = "배경화면을 한 번 적용하면 오늘 표시가 매일 자동으로 갱신됩니다."
+            setStatus("배경화면을 한 번 적용하면 오늘 표시가 매일 자동으로 갱신됩니다.")
             return
         }
 
@@ -118,32 +158,34 @@ final class WallpaperAutomation: ObservableObject {
         let differentWeek = candidate.connection.map {
             $0.weekStart != week.start || $0.timeZoneID != candidate.timeZone.identifier
         } ?? false
-        let initialize = request.trigger == .enabled || candidate.receipt == nil
-        // Explicit rechecking can recover a failed enable within this week.
-        // It must not advance an older snapshot when weekly refresh is disabled.
-        let mayRefreshWeek = request.trigger != .manual || !differentWeek || settings.refreshWeekly
-        let manualRefresh = request.trigger == .manual && mayRefreshWeek
+        // Only an explicit enable may initialize a new current-week snapshot
+        // while weekly advancement is disabled. Routine recovery retains it.
+        let enabledForThisWeek = calendarRefreshReasons.contains(.enabled) && enabledRefreshWeek == week
+        let mayRefreshWeek = !differentWeek || settings.refreshWeekly || enabledForThisWeek
         let shouldFetch = settings.hasCalendarAutomation && mayRefreshWeek &&
-            (initialize || manualRefresh || (settings.refreshWeekly && differentWeek) ||
-             (settings.refreshOnCalendarChange && !differentWeek))
+            (candidate.receipt == nil || !calendarRefreshReasons.isEmpty || (settings.refreshWeekly && differentWeek))
+        let appearanceReasons: Set<AutomationTrigger> = [.settingsChanged, .enabled, .activated,
+            .displayChanged, .launch, .wake, .timeChanged]
         let shouldCheckAppearance = candidate.receipt != nil &&
-            (settings.showToday || request.trigger == .settingsChanged || request.trigger == .enabled || request.trigger == .launch || request.trigger == .wake)
+            (settings.showToday || !request.triggers.isDisjoint(with: appearanceReasons))
 
         guard shouldFetch || shouldCheckAppearance else {
-            status = waitingStatus(candidate, differentWeek: differentWeek)
+            setStatus(waitingStatus(candidate, differentWeek: differentWeek))
             return
         }
 
         var calendarFingerprint = candidate.receipt?.calendarFingerprint
         do {
             if shouldFetch, var connection = candidate.connection {
-                status = "이번 주 캘린더 일정을 확인하고 있습니다…"
+                // Keep the original cause until success. Initialization and
+                // weekly retries are also implied by the unchanged snapshot.
+                setStatus("이번 주 캘린더 일정을 확인하고 있습니다…")
                 _ = try validateConnection(connection)
                 let events = try await provider.events(calendarIDs: connection.calendarIDs, week: week)
                 // Both user edits and newer notifications supersede this query.
                 guard revision == generation else { return }
                 let calendars = try validateConnection(connection)
-                needsCalendarReconnect = false
+                if needsCalendarReconnect { needsCalendarReconnect = false }
                 let converted = CalendarEventConverter.convert(events, week: week).entries
                 // Reconcile every source record before filtering, so a hidden
                 // event can keep its latest identity/details without resurfacing.
@@ -207,13 +249,17 @@ final class WallpaperAutomation: ObservableObject {
                     candidate.entries != context?.entries || candidate.configuration != context?.configuration ||
                     candidate.receipt != context?.receipt || candidate.calendarVisibility != context?.calendarVisibility
                 context = candidate
+                if shouldFetch {
+                    calendarRefreshReasons = []
+                    enabledRefreshWeek = nil
+                }
                 if metadataChanged {
                     onStateChange?(AutomationUpdate(entries: candidate.entries,
                         configuration: candidate.configuration, connection: candidate.connection,
                         receipt: receipt, reason: "배경화면은 같아 캘린더 연결 정보만 갱신했습니다.",
                         calendarVisibility: candidate.calendarVisibility))
                 }
-                status = waitingStatus(candidate, differentWeek: differentWeek && !shouldFetch)
+                setStatus(waitingStatus(candidate, differentWeek: differentWeek && !shouldFetch))
                 return
             }
 
@@ -227,19 +273,27 @@ final class WallpaperAutomation: ObservableObject {
             // No state or receipt is advanced before the native apply succeeds.
             try apply(update)
             candidate.receipt = receipt
-            if revision == generation { context = candidate }
-            lastAppliedAt = request.now
-            status = reason
-            if differentWeek && !shouldFetch && !settings.refreshWeekly {
-                status += " 이전 주 일정은 유지했습니다."
+            if revision == generation {
+                context = candidate
+                if shouldFetch {
+                    calendarRefreshReasons = []
+                    enabledRefreshWeek = nil
+                }
             }
+            if lastAppliedAt != request.now { lastAppliedAt = request.now }
+            setStatus(reason + (differentWeek && !shouldFetch && !settings.refreshWeekly
+                ? " 이전 주 일정은 유지했습니다." : ""))
         } catch {
             guard revision == generation else { return }
             if let calendarError = error as? CalendarImportError, case .permissionDenied = calendarError {
-                needsCalendarReconnect = true
+                if !needsCalendarReconnect { needsCalendarReconnect = true }
             }
-            status = "자동 교체를 완료하지 못했습니다. \(error.localizedDescription) 기존 배경화면을 유지합니다."
+            setStatus("자동 교체를 완료하지 못했습니다. \(error.localizedDescription) 기존 배경화면을 유지합니다.")
         }
+    }
+
+    private func setStatus(_ value: String) {
+        if status != value { status = value }
     }
 
     private func validateConnection(_ connection: CalendarConnection) throws -> [CalendarDescriptor] {
@@ -315,7 +369,7 @@ final class WallpaperAutomation: ObservableObject {
     static func fingerprint(entries: [ScheduleEntry], configuration: WallpaperConfiguration,
                             targetDisplayID: String) -> String {
         struct Payload: Encodable {
-            var version = 1
+            var version = 2
             var entries: [[String]]
             var configuration: WallpaperConfiguration
             var targetDisplayID: String

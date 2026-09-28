@@ -26,10 +26,16 @@ The standalone checks use the selected Swift toolchain. If the macOS 27 Command 
 ./scripts/verify-calendar-visibility.sh
 ./scripts/verify-calendar-visibility-app.sh
 ./scripts/verify-spaces.sh
+./scripts/verify-energy-behavior.sh
+./scripts/verify-persistence.sh
 python3 scripts/verify-signing.py
 ```
 
 `swift test` additionally requires an Xcode environment with XCTest. Tests use fixtures and fake calendar providers; native permissions and all-Space behavior need macOS integration checks. See the [development log](devlog.md) for checks actually run at each milestone.
+
+The energy harness counts calendar reads and checks preview reuse through the real AppStore with fictional calendars. Run it and `verify-calendar-visibility-app.sh` sequentially: both use the same temporary demo PNG. Persistence checks use disposable files and verify coalescing, latest-snapshot durability, and failure recovery.
+
+For a synthetic release-mode renderer CPU comparison, run `./scripts/benchmark-renderer.sh`. This does not measure battery life or system energy use. Measured scope and deferred work are recorded in [energy-comparison.json](../artifacts/energy-comparison.json).
 
 ## Rebuild the README gallery
 

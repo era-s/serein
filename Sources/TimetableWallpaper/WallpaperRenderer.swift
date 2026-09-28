@@ -176,11 +176,6 @@ enum WallpaperRenderer {
             cornerMarks(frame)
             header(frame: frame, dividerY: dividerY)
             timetable(entries: entries, frame: frame, dividerY: dividerY)
-
-            text("WEEKLY RHYTHM", in: CGRect(x: frame.minX, y: frame.maxY + 17, width: 300, height: 17),
-                 font: mono(10), color: ink.withAlphaComponent(0.72), tracking: 2.4)
-            text("A PLACE FOR YOUR TIME.", in: CGRect(x: frame.maxX - 330, y: frame.maxY + 17, width: 330, height: 17),
-                 font: mono(10), color: ink.withAlphaComponent(0.72), alignment: .right, tracking: 1.8)
         }
 
         private func background() {
@@ -235,31 +230,6 @@ enum WallpaperRenderer {
                 pointSize -= 1
             }
             text(displayTitle, in: titleRect, font: serif(pointSize), color: ink, lineSpacing: -2)
-
-            let diagram = CGRect(x: frame.maxX - 314, y: frame.minY + 31, width: 266, height: dividerY - frame.minY - 61)
-            geometricStudy(in: diagram)
-            text("01 / TIME, WELL SPENT", in: CGRect(x: diagram.minX, y: diagram.minY, width: diagram.width, height: 17),
-                 font: mono(10), color: ink.withAlphaComponent(0.81), tracking: 1.3)
-            text("A LITTLE STRUCTURE.\nA LOT OF POSSIBILITY.",
-                 in: CGRect(x: diagram.minX, y: diagram.maxY - 31, width: diagram.width, height: 34),
-                 font: mono(9), color: ink.withAlphaComponent(0.68), alignment: .right, tracking: 1.5, lineSpacing: 4)
-        }
-
-        private func geometricStudy(in rect: CGRect) {
-            let center = CGPoint(x: rect.midX, y: rect.midY + 4)
-            let radius = min(rect.height * 0.34, 73)
-            context.saveGState()
-            context.setStrokeColor(ink.withAlphaComponent(0.29).cgColor)
-            context.setLineWidth(0.75)
-            context.strokeEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-            context.strokeEllipse(in: CGRect(x: center.x - radius * 0.73, y: center.y - radius, width: radius * 1.46, height: radius * 2))
-            context.strokeEllipse(in: CGRect(x: center.x - radius * 0.30, y: center.y - radius, width: radius * 0.6, height: radius * 2))
-            line(CGPoint(x: center.x - radius - 18, y: center.y), CGPoint(x: center.x + radius + 18, y: center.y), alpha: 0.35)
-            line(CGPoint(x: center.x, y: center.y - radius - 10), CGPoint(x: center.x, y: center.y + radius + 10), alpha: 0.35)
-            line(CGPoint(x: center.x - radius - 27, y: center.y + radius * 0.8),
-                 CGPoint(x: center.x + radius + 27, y: center.y - radius * 0.8), alpha: 0.7)
-            fill(CGRect(x: center.x + radius * 0.80 - 2, y: center.y - radius * 0.62 - 2, width: 4, height: 4), color: ink)
-            context.restoreGState()
         }
 
         private func timetable(entries: [ScheduleEntry], frame: CGRect, dividerY: CGFloat) {
@@ -345,9 +315,6 @@ enum WallpaperRenderer {
                 text("Room for a new rhythm.", in: label.insetBy(dx: 20, dy: 20), font: serif(28), color: ink, alignment: .center)
             }
 
-            text("PLAN WITH PURPOSE. LEAVE ROOM TO PLAY.",
-                 in: CGRect(x: grid.minX, y: frame.maxY - 26, width: grid.width * 0.75, height: 15),
-                 font: mono(8), color: ink.withAlphaComponent(0.7), tracking: 1.65)
             let totalMinutes = entries.reduce(0) { $0 + $1.endMinutes - $1.startMinutes }
             let hours = Double(totalMinutes) / 60
             let stats = String(format: "%02d SESSIONS / %.1f HRS", entries.count, hours)

@@ -8,7 +8,7 @@ import ServiceManagement
 @MainActor
 final class AppStore: ObservableObject {
     @Published var entries: [ScheduleEntry] = ScheduleEntry.sample { didSet { changed() } }
-    @Published var configuration = WallpaperConfiguration() { didSet { changed() } }
+    @Published var configuration = WallpaperConfiguration() { didSet { configurationChanged(from: oldValue) } }
     @Published var preview: NSImage?
     @Published var isRecognizing = false
     @Published var isExporting = false
@@ -30,7 +30,7 @@ final class AppStore: ObservableObject {
     var now: Date { isDemo ? DemoCalendarProvider.anchor.addingTimeInterval(2 * 86400 + 12 * 3600) : Date() }
     private var observers = Set<AnyCancellable>()
     private var checkTask: Task<Void, Never>?
-    private var scheduledTrigger: AutomationTrigger?
+    private var scheduledTriggers = Set<AutomationTrigger>()
     private var committingAutomation = false
     private lazy var calendarProvider: any CalendarProviding = {
         if isDemo { return DemoCalendarProvider() }
@@ -55,13 +55,17 @@ final class AppStore: ObservableObject {
     private var previewFingerprint: String?
     private var loading = true
     private var autosaveEnabled = true
+    private lazy var persistence = StudioPersistence(
+        url: Self.supportDirectory.appendingPathComponent("studio.json"),
+        onError: { [weak self] error in self?.error = "작업을 저장하지 못했습니다. \(error.localizedDescription)" })
 
     static var supportDirectory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Serein", isDirectory: true)
     }
 
-    init() {
+    init(calendarProvider: (any CalendarProviding)? = nil) {
+        if let calendarProvider { self.calendarProvider = calendarProvider }
         var migratedWallpaperScope = false
         if isDemo {
             autosaveEnabled = false
@@ -114,19 +118,35 @@ final class AppStore: ObservableObject {
         refreshPreview()
     }
 
-    private func changed() {
+    private var snapshot: SavedStudio {
+        SavedStudio(entries: entries, configuration: configuration,
+            automation: automationSettings, connection: calendarConnection,
+            receipt: automationReceipt, calendarVisibility: calendarVisibility)
+    }
+
+    private func configurationChanged(from old: WallpaperConfiguration) {
+        guard old != configuration else { return }
+        var withoutTextChange = old
+        withoutTextChange.title = configuration.title
+        withoutTextChange.subtitle = configuration.subtitle
+        changed(deferPersistence: withoutTextChange == configuration)
+    }
+
+    func flushPendingSave() throws {
+        guard autosaveEnabled else { return }
+        try persistence.flush()
+    }
+
+    private func changed(deferPersistence: Bool = false) {
         guard !loading else { return }
-        if autosaveEnabled { do {
-            try FileManager.default.createDirectory(at: Self.supportDirectory, withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(SavedStudio(entries: entries, configuration: configuration,
-                automation: automationSettings, connection: calendarConnection, receipt: automationReceipt,
-                calendarVisibility: calendarVisibility))
-                .write(to: Self.supportDirectory.appendingPathComponent("studio.json"), options: .atomic)
-        } catch { self.error = "작업을 저장하지 못했습니다. \(error.localizedDescription)" } }
+        if autosaveEnabled {
+            if deferPersistence && !committingAutomation { persistence.schedule(snapshot) }
+            else {
+                do { try persistence.saveImmediately(snapshot) }
+                catch { self.error = "작업을 저장하지 못했습니다. \(error.localizedDescription)" }
+            }
+        }
         if !committingAutomation {
-            scheduledTrigger = nil
             automation.configure(automationContext)
             scheduleCheck(.settingsChanged, delay: 0.5)
         }
@@ -140,6 +160,7 @@ final class AppStore: ObservableObject {
     }
 
     func setStudioVisible(_ visible: Bool) {
+        guard studioVisible != visible else { return }
         studioVisible = visible
         if visible { refreshPreview() }
         else { renderTask?.cancel() }
@@ -329,6 +350,13 @@ final class AppStore: ObservableObject {
     }
     private func automationOptionsChanged(_ old: AutomationSettings) {
         guard !loading else { return }
+        if old.refreshOnCalendarChange && !automationSettings.refreshOnCalendarChange {
+            scheduledTriggers.subtract([.calendarChanged, .launch, .wake, .timeChanged])
+        }
+        if (old.refreshOnCalendarChange && !automationSettings.refreshOnCalendarChange) ||
+            (old.refreshWeekly && !automationSettings.refreshWeekly) {
+            scheduledTriggers.remove(.enabled)
+        }
         if automationSettings.hasAutomation && automationSettings.targetDisplayID == nil {
             loading = true
             automationSettings.targetDisplayID = WallpaperDisplay.allSpacesID
@@ -383,7 +411,6 @@ final class AppStore: ObservableObject {
                 self.message = "권한 연결을 확인했습니다. 새로 선택한 캘린더 설정을 유지합니다."
                 return
             }
-            self.scheduledTrigger = nil
             self.automation.configure(self.automationContext)
             self.scheduleCheck(.manual, delay: 0)
             self.message = "캘린더 권한 연결을 확인했습니다. 기존 자동화 설정으로 다시 확인합니다."
@@ -392,24 +419,20 @@ final class AppStore: ObservableObject {
     private func scheduleCheck(_ trigger: AutomationTrigger, delay: Double) {
         guard automationSettings.hasAutomation else {
             checkTask?.cancel()
-            scheduledTrigger = nil
+            scheduledTriggers.removeAll()
             return
         }
         // Ignore unrelated store notifications without cancelling a pending enable.
         if trigger == .calendarChanged && !automationSettings.refreshOnCalendarChange { return }
         checkTask?.cancel()
-        // Explicit enable/scope changes must survive timer events during debounce.
-        let selectedTrigger: AutomationTrigger
-        if scheduledTrigger == .enabled || trigger == .enabled { selectedTrigger = .enabled }
-        else if scheduledTrigger == .manual || trigger == .manual { selectedTrigger = .manual }
-        else if scheduledTrigger == .settingsChanged { selectedTrigger = .settingsChanged }
-        else { selectedTrigger = trigger }
-        scheduledTrigger = selectedTrigger
+        // Preserve all reasons: a settings edit must not consume a calendar notification.
+        scheduledTriggers.insert(trigger)
         checkTask = Task { [weak self] in
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
             guard !Task.isCancelled, let self else { return }
-            self.scheduledTrigger = nil
-            await self.automation.check(trigger: selectedTrigger, now: self.now)
+            let reasons = self.scheduledTriggers
+            self.scheduledTriggers.removeAll()
+            await self.automation.check(triggers: reasons, now: self.now)
             self.refreshCalendarAccess()
             self.refreshPreview()
         }
@@ -428,29 +451,45 @@ final class AppStore: ObservableObject {
             .receive(on: RunLoop.main).sink { [weak self] _ in
                 guard let self else { return }
                 self.automation.configure(self.automationContext)
-                self.scheduleCheck(.wake, delay: 0.3)
+                self.scheduleCheck(.timeChanged, delay: 0.3)
             }.store(in: &observers)
-        for name in [NSApplication.didBecomeActiveNotification, NSNotification.Name.NSCalendarDayChanged,
-                     Notification.Name.NSSystemClockDidChange] {
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .receive(on: RunLoop.main).sink { [weak self] _ in
+                guard let self else { return }
+                let previousAccess = self.calendarRecovery.access
+                self.refreshLoginStatus()
+                self.refreshCalendarAccess()
+                self.scheduleCheck(previousAccess != .authorized && self.calendarRecovery.access == .authorized
+                    ? .permissionRecovered : .activated, delay: 0.3)
+                self.refreshPreview()
+            }.store(in: &observers)
+        for (name, reason) in [(NSNotification.Name.NSCalendarDayChanged, AutomationTrigger.clock),
+                               (NSNotification.Name.NSSystemClockDidChange, .timeChanged)] {
             NotificationCenter.default.publisher(for: name).receive(on: RunLoop.main).sink { [weak self] _ in
-                self?.refreshLoginStatus()
-                self?.refreshCalendarAccess()
-                self?.scheduleCheck(.wake, delay: 0.3)
+                self?.scheduleCheck(reason, delay: 0.3)
             }.store(in: &observers)
         }
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)
+            .receive(on: RunLoop.main).sink { [weak self] _ in
+                do { try self?.flushPendingSave() }
+                catch { self?.error = "작업을 저장하지 못했습니다. \(error.localizedDescription)" }
+            }.store(in: &observers)
         NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification).receive(on: RunLoop.main).sink { [weak self] _ in
             self?.scheduleCheck(.wake, delay: 1)
         }.store(in: &observers)
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification).receive(on: RunLoop.main).sink { [weak self] _ in
             self?.refreshDisplays()
-            self?.scheduleCheck(.wake, delay: 0.5)
+            self?.scheduleCheck(.displayChanged, delay: 0.5)
         }.store(in: &observers)
         scheduleCheck(initialTrigger, delay: 0.5)
     }
     func refreshLoginStatus() {
         guard !isDemo else { return }
-        loginEnabled = SMAppService.mainApp.status == .enabled
-        loginNeedsApproval = SMAppService.mainApp.status == .requiresApproval
+        let status = SMAppService.mainApp.status
+        let enabled = status == .enabled
+        let needsApproval = status == .requiresApproval
+        if loginEnabled != enabled { loginEnabled = enabled }
+        if loginNeedsApproval != needsApproval { loginNeedsApproval = needsApproval }
     }
     func setLoginEnabled(_ enabled: Bool) {
         guard !isDemo else { loginEnabled = enabled; return }

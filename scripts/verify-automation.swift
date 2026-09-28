@@ -112,6 +112,267 @@ enum AutomationVerification {
         expect(restored == settings && !restored.refreshWeekly, "Independent automation switches survive a JSON round trip")
     }
 
+    private static func checkAppearanceFetchBoundary() async {
+        let harness = AutomationHarness(context(today: true))
+        harness.provider.records = [event()]
+        await harness.engine.check(trigger: .enabled, now: wednesday)
+        harness.acceptLatest()
+        let reads = harness.provider.eventRequests.count
+        for index in 0..<10 {
+            harness.context.configuration.title = "Design edit \(index)"
+            harness.engine.configure(harness.context)
+            await harness.engine.check(trigger: .settingsChanged, now: wednesday.addingTimeInterval(Double(index + 1)))
+            harness.acceptLatest()
+        }
+        expect(harness.provider.eventRequests.count == reads,
+               "Ten appearance edits reuse the current calendar snapshot without additional fetches")
+        for trigger: AutomationTrigger in [.activated, .displayChanged] {
+            for _ in 0..<10 { await harness.engine.check(trigger: trigger, now: wednesday) }
+        }
+        expect(harness.provider.eventRequests.count == reads,
+               "Ten activations and display changes each reuse a healthy same-week snapshot")
+        await harness.engine.check(trigger: .clock, now: date("2026-09-10T00:00:00+09:00"))
+        expect(harness.provider.eventRequests.count == reads && harness.sink.updates.last?.configuration.highlightedDay == 3,
+               "A new day redraws today's marker with existing events even when calendar-change refresh is enabled")
+    }
+
+    private static func checkMergedCalendarReasons() async {
+        let harness = AutomationHarness(context(today: true))
+        harness.provider.records = [event()]
+        await harness.engine.check(trigger: .enabled, now: wednesday)
+        harness.acceptLatest()
+        harness.context.configuration.title = "Edited during debounce"
+        harness.engine.configure(harness.context)
+        harness.provider.records = [event(title: "Calendar change during edit debounce")]
+        await harness.engine.check(triggers: [.settingsChanged, .calendarChanged], now: wednesday)
+        expect(harness.provider.eventRequests.count == 2 && harness.sink.updates.last?.entries.first?.name == "Calendar change during edit debounce"
+               && harness.sink.updates.last?.configuration.title == "Edited during debounce",
+               "A coalesced settings edit retains the calendar fetch and applies both final inputs")
+        harness.acceptLatest()
+
+        harness.provider.suspendEvents = true
+        let active = Task { await harness.engine.check(trigger: .calendarChanged, now: wednesday) }
+        await waitForRequests(3, provider: harness.provider)
+        harness.context.configuration.theme = .moss
+        harness.engine.configure(harness.context)
+        let edit = Task { await harness.engine.check(trigger: .settingsChanged, now: wednesday) }
+        await Task.yield()
+        harness.provider.completeRequest(2, records: [event(title: "Obsolete result before edit")])
+        await waitForRequests(4, provider: harness.provider)
+        harness.provider.completeRequest(3, records: [event(title: "Calendar survives configure")])
+        await active.value
+        await edit.value
+        expect(harness.provider.eventRequests.count == 4 && harness.sink.updates.count == 3
+               && harness.sink.updates.last?.entries.first?.name == "Calendar survives configure"
+               && harness.sink.updates.last?.configuration.theme == .moss,
+               "Configure during an active calendar query retains its dirty reason until the new design and events commit")
+        harness.acceptLatest()
+
+        let burst = Task { await harness.engine.check(trigger: .calendarChanged, now: wednesday) }
+        await waitForRequests(5, provider: harness.provider)
+        var registered = 0
+        var callers: [Task<Void, Never>] = []
+        for index in 0..<20 {
+            callers.append(Task {
+                registered += 1
+                await harness.engine.check(trigger: index.isMultiple(of: 2) ? .calendarChanged : .settingsChanged, now: wednesday)
+            })
+            while registered < index + 1 { await Task.yield() }
+        }
+        harness.provider.completeRequest(4, records: [event(title: "Obsolete burst result")])
+        await waitForRequests(6, provider: harness.provider)
+        harness.provider.completeRequest(5, records: [event(title: "Final burst content")])
+        await burst.value
+        for caller in callers { await caller.value }
+        expect(harness.provider.eventRequests.count == 6 && harness.sink.updates.count == 4
+               && harness.sink.updates.last?.entries.first?.name == "Final burst content",
+               "Twenty notifications and edits during a fetch produce exactly one follow-up with the final state")
+        harness.acceptLatest()
+        harness.provider.suspendEvents = false
+        await harness.engine.check(trigger: .activated, now: wednesday)
+        expect(harness.provider.eventRequests.count == 6,
+               "Successful synchronization clears the pending dirty reason for later ordinary activation")
+    }
+
+    private static func checkAppearanceEditDuringOldWeekEnable() async {
+        let harness = AutomationHarness(context())
+        harness.provider.records = [event()]
+        await harness.engine.check(trigger: .enabled, now: wednesday)
+        harness.acceptLatest()
+        harness.provider.suspendEvents = true
+        let enable = Task { await harness.engine.check(trigger: .enabled, now: monday) }
+        await waitForRequests(2, provider: harness.provider)
+        harness.context.configuration.theme = .moss
+        harness.engine.configure(harness.context)
+        let edit = Task { await harness.engine.check(trigger: .settingsChanged, now: monday) }
+        await Task.yield()
+        harness.provider.suspendEvents = false
+        harness.provider.records = [event("new-week", title: "Enabled current week", start: "2026-09-14T10:00:00+09:00", end: "2026-09-14T11:00:00+09:00")]
+        harness.provider.completeRequest(1, records: harness.provider.records)
+        await enable.value
+        await edit.value
+        expect(harness.provider.eventRequests.count == 3 && harness.sink.updates.last?.connection?.weekStart == monday
+               && harness.sink.updates.last?.entries.first?.name == "Enabled current week"
+               && harness.sink.updates.last?.configuration.theme == .moss,
+               "An appearance edit retains an in-flight explicit enable's authority to fetch its intended current week")
+    }
+
+    private static func checkCalendarOptOutRevokesPassiveWork() async {
+        for explicitManual in [false, true] {
+            let harness = AutomationHarness(context(changes: true, weekly: true))
+            harness.provider.records = [event()]
+            await harness.engine.check(trigger: .enabled, now: wednesday)
+            harness.acceptLatest()
+            harness.provider.suspendEvents = true
+            let active = Task { await harness.engine.check(trigger: .calendarChanged, now: wednesday) }
+            await waitForRequests(2, provider: harness.provider)
+            var registered = false
+            let queued = Task {
+                registered = true
+                var reasons: Set<AutomationTrigger> = [.calendarChanged, .launch, .wake, .timeChanged]
+                if explicitManual { reasons.insert(.manual) }
+                await harness.engine.check(triggers: reasons, now: wednesday)
+            }
+            while !registered { await Task.yield() }
+            harness.context.settings.refreshOnCalendarChange = false
+            harness.engine.configure(harness.context)
+            let edit = Task { await harness.engine.check(trigger: .settingsChanged, now: wednesday) }
+            await Task.yield()
+            harness.provider.suspendEvents = false
+            harness.provider.records = [event(title: "Changed after opting out")]
+            harness.provider.completeRequest(1, records: harness.provider.records)
+            await active.value
+            await queued.value
+            await edit.value
+            if explicitManual {
+                expect(harness.provider.eventRequests.count == 3
+                       && harness.sink.updates.last?.entries.first?.name == "Changed after opting out",
+                       "Calendar-change opt-out preserves a separately queued explicit manual check")
+            } else {
+                expect(harness.provider.eventRequests.count == 2 && harness.sink.updates.count == 1,
+                       "Calendar-change opt-out rejects its active result and prunes passive pending recovery reasons")
+                await harness.engine.check(trigger: .activated, now: wednesday)
+                expect(harness.provider.eventRequests.count == 2,
+                       "Opting out leaves no forged manual retry that would refresh on the next activation")
+            }
+        }
+    }
+
+    private static func checkRecoveryFetchReasons() async {
+        let harness = AutomationHarness(context(changes: false, weekly: true))
+        harness.provider.records = [event()]
+        await harness.engine.check(trigger: .enabled, now: wednesday)
+        harness.acceptLatest()
+        harness.provider.records = [event(title: "Wait until next week")]
+        for trigger: AutomationTrigger in [.launch, .wake, .timeChanged] {
+            let before = harness.provider.eventRequests.count
+            await harness.engine.check(trigger: trigger, now: wednesday)
+            expect(harness.provider.eventRequests.count == before && harness.sink.updates.count == 1,
+                   "\(trigger) retains a weekly-only snapshot until the next week")
+        }
+        let changes = AutomationHarness(context())
+        changes.provider.records = [event()]
+        await changes.engine.check(trigger: .enabled, now: wednesday)
+        changes.acceptLatest()
+        for trigger: AutomationTrigger in [.launch, .wake, .timeChanged] {
+            let before = changes.provider.eventRequests.count
+            await changes.engine.check(trigger: trigger, now: wednesday)
+            expect(changes.provider.eventRequests.count == before + 1 && changes.sink.updates.count == 1,
+                   "\(trigger) recovers missed notifications for calendar-change automation without rewriting unchanged wallpaper")
+        }
+        harness.provider.failure = .providerRead
+        await harness.engine.check(trigger: .manual, now: wednesday)
+        harness.context.configuration.title = "Edit after failed fetch"
+        harness.engine.configure(harness.context)
+        harness.provider.failure = nil
+        harness.provider.records = [event(title: "Recovered after read failure")]
+        let beforeRetry = harness.provider.eventRequests.count
+        await harness.engine.check(trigger: .activated, now: wednesday)
+        expect(harness.provider.eventRequests.count == beforeRetry + 1
+               && harness.sink.updates.last?.entries.first?.name == "Recovered after read failure"
+               && harness.sink.updates.last?.configuration.title == "Edit after failed fetch",
+               "A failed read survives appearance configure and retries on ordinary activation")
+        harness.acceptLatest()
+        harness.provider.access = .denied
+        await harness.engine.check(trigger: .activated, now: wednesday)
+        harness.provider.access = .authorized
+        harness.provider.records = [event(title: "Restored system permission")]
+        let beforePermission = harness.provider.eventRequests.count
+        await harness.engine.check(trigger: .activated, now: wednesday)
+        expect(harness.provider.eventRequests.count == beforePermission + 1
+               && harness.sink.updates.last?.entries.first?.name == "Restored system permission",
+               "Permission restored between ordinary activations refreshes the existing weekly-only connection")
+        harness.acceptLatest()
+        let settled = harness.provider.eventRequests.count
+        await harness.engine.check(trigger: .activated, now: wednesday)
+        expect(harness.provider.eventRequests.count == settled,
+               "Permission recovery is consumed once instead of making every activation fetch")
+
+        let retained = AutomationHarness(context(changes: true, weekly: false))
+        retained.provider.records = [event()]
+        await retained.engine.check(trigger: .enabled, now: wednesday)
+        retained.acceptLatest()
+        for trigger: AutomationTrigger in [.launch, .wake, .timeChanged, .activated, .permissionRecovered] {
+            await retained.engine.check(trigger: trigger, now: monday)
+        }
+        expect(retained.provider.eventRequests.count == 1 && retained.sink.updates.count == 1,
+               "Recovery triggers never advance an older calendar week while weekly refresh is disabled")
+
+        let failedEnable = AutomationHarness(retained.context)
+        failedEnable.provider.access = .denied
+        await failedEnable.engine.check(trigger: .enabled, now: wednesday)
+        failedEnable.provider.access = .authorized
+        await failedEnable.engine.check(trigger: .wake, now: monday)
+        expect(failedEnable.provider.eventRequests.isEmpty && failedEnable.sink.updates.isEmpty,
+               "A failed enable cannot grant a later routine wake permission to advance a retained week")
+
+        var toggleContext = retained.context
+        toggleContext.settings.refreshWeekly = true
+        let toggled = AutomationHarness(toggleContext)
+        toggled.provider.suspendEvents = true
+        let inFlight = Task { await toggled.engine.check(trigger: .manual, now: monday) }
+        await waitForRequests(1, provider: toggled.provider)
+        var enableRegistered = false
+        let queuedEnable = Task {
+            enableRegistered = true
+            await toggled.engine.check(trigger: .enabled, now: monday)
+        }
+        while !enableRegistered { await Task.yield() }
+        toggled.context.settings.refreshWeekly = false
+        toggled.engine.configure(toggled.context)
+        let turnedOff = Task { await toggled.engine.check(trigger: .settingsChanged, now: monday) }
+        await Task.yield()
+        toggled.provider.suspendEvents = false
+        toggled.provider.completeRequest(0, records: [])
+        await inFlight.value
+        await queuedEnable.value
+        await turnedOff.value
+        expect(toggled.provider.eventRequests.count == 1 && toggled.sink.updates.isEmpty,
+               "Turning weekly refresh off revokes queued enable authority without accepting the active new-week read")
+    }
+
+    private static func checkChangedConnectionScope() async {
+        let harness = AutomationHarness(context())
+        harness.provider.records = [event()]
+        await harness.engine.check(trigger: .enabled, now: wednesday)
+        harness.acceptLatest()
+        harness.provider.suspendEvents = true
+        let oldRead = Task { await harness.engine.check(trigger: .calendarChanged, now: wednesday) }
+        await waitForRequests(2, provider: harness.provider)
+        harness.context.connection?.calendarIDs = ["new-school"]
+        harness.context.connection?.managedEntryKeys = []
+        harness.context.entries = [ScheduleEntry(name: "New selected snapshot", day: 0, startMinutes: 600, endMinutes: 660)]
+        harness.engine.configure(harness.context)
+        let edit = Task { await harness.engine.check(trigger: .settingsChanged, now: wednesday) }
+        await Task.yield()
+        harness.provider.completeRequest(1, records: [event(title: "Wrong source's late result")])
+        await oldRead.value
+        await edit.value
+        expect(harness.provider.eventRequests.count == 2 && harness.sink.updates.last?.entries.first?.name == "New selected snapshot"
+               && harness.sink.updates.last?.connection?.calendarIDs == ["new-school"],
+               "Changing selected calendars rejects an old result and does not transfer its dirty fetch to the new snapshot")
+    }
+
     private static func checkCurrentWeekRefresh() async {
         let off = AutomationHarness(context(changes: false))
         for trigger: AutomationTrigger in [.enabled, .calendarChanged, .clock, .wake, .launch] {
@@ -575,6 +836,12 @@ enum AutomationVerification {
     static func main() async throws {
         try checkFingerprintAndDates()
         try checkSavedStudio()
+        await checkAppearanceFetchBoundary()
+        await checkMergedCalendarReasons()
+        await checkAppearanceEditDuringOldWeekEnable()
+        await checkCalendarOptOutRevokesPassiveWork()
+        await checkRecoveryFetchReasons()
+        await checkChangedConnectionScope()
         await checkMigratedScopeRefresh()
         await checkCurrentWeekRefresh()
         await checkWeeklySwitch()

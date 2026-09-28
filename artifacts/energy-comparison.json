@@ -1,0 +1,135 @@
+{
+  "prompt_ids": [
+    "P001",
+    "P002",
+    "P004",
+    "P010",
+    "P012",
+    "P013",
+    "P014"
+  ],
+  "app_version": "0.3.8",
+  "build": 12,
+  "date": "2026-09-28",
+  "scope": "Synthetic work-count regressions and short release renderer CPU profiling; no battery-life or system energy measurement.",
+  "privacy": "Only fictional fixtures and aggregate measurements. No personal schedules, account IDs, absolute user paths, screenshots, signing material, or traces.",
+  "workloads": {
+    "continuous_title_edits": {
+      "edits": 20,
+      "interval_ms": 50,
+      "prior_atomic_write_boundary_writes": 20,
+      "new_disk_writes": 1,
+      "final_snapshot_decoded": true,
+      "baseline_scope": "Prior immediate AppStore save boundary reproduced in a temporary adapter, not a whole-app energy run."
+    },
+    "settled_appearance_edits": {
+      "edits": 10,
+      "additional_calendar_reads": 0
+    },
+    "ordinary_activations": {
+      "events": 10,
+      "additional_calendar_reads": 0
+    },
+    "same_day_and_display_notifications": {
+      "additional_calendar_reads": 0
+    },
+    "calendar_notification_burst_with_edit": {
+      "notifications": 20,
+      "calendar_reads": 1,
+      "latest_calendar_and_design_retained": true
+    },
+    "real_wake_notification": {
+      "additional_calendar_reads": 1
+    },
+    "hidden_preview": {
+      "object_reused_during_design_and_calendar_changes": true,
+      "refresh_on_reveal": true,
+      "unchanged_visible_preview_reused": true
+    },
+    "disabled_calendar_notifications": {
+      "additional_calendar_reads": 0
+    },
+    "option_off_races": {
+      "debounced_weekly_enable_revoked": true,
+      "debounced_change_notification_revoked": true
+    }
+  },
+  "persistence": {
+    "quiet_ms": 300,
+    "maximum_pending_ms": 2000,
+    "atomic_writes": true,
+    "discrete_changes_immediate": true,
+    "failed_snapshot_retained": true,
+    "periodic_retry_timer": false
+  },
+  "grain_assessment": {
+    "measurement": "Process CPU milliseconds; swiftc -O; one warmup and seven samples per size and texture setting.",
+    "baseline_texture_on_median_cpu_ms": {
+      "756x491": 27.19,
+      "3024x1964": 371.61,
+      "3840x2160": 526.94
+    },
+    "clean_texture_on_median_cpu_ms": {
+      "756x491": 29.63,
+      "3024x1964": 391.7,
+      "3840x2160": 552.81
+    },
+    "isolated_grain_construction_median_cpu_ms": {
+      "756x491": 2.666,
+      "3024x1964": 2.668,
+      "3840x2160": 2.328
+    },
+    "decision": "No cache: only about 0.44–0.72% of full-size PNG CPU would be cacheable, with roughly 5–6 MB retained memory.",
+    "limits": "Runs overlapped development activity. Full-render numbers are cost observations, not a claimed speedup. Texture on/off differences also include compositing and compression."
+  },
+  "not_measured": [
+    "180-minute before/after idle protocol",
+    "battery-life change",
+    "Energy Impact",
+    "App Nap state",
+    "process wakeups",
+    "long-run RSS comparison"
+  ],
+  "verification": "See docs/devlog.md M019 for the final test and installed-app results.",
+  "synthetic_assertions": {
+    "automation": 118,
+    "calendar_recovery": 45,
+    "calendar_visibility_model": 32,
+    "calendar_visibility_app": 41,
+    "energy_behavior": 22,
+    "persistence": 22,
+    "renderer": 100,
+    "weekday_labels": 51,
+    "all_spaces": 524,
+    "calendar_import": 85,
+    "total": 1040
+  },
+  "installed_app": {
+    "entries_preserved": true,
+    "configuration_preserved": true,
+    "automation_preserved": true,
+    "calendarVisibility_preserved": true,
+    "selected_calendars_preserved": true,
+    "spaces": 7,
+    "desktop_slots": 22,
+    "all_slots_same_image": true,
+    "image_changed": true,
+    "image_exists": true,
+    "screensaver_content_preserved": true,
+    "os_version": "27.0",
+    "os_build": "26A428",
+    "previous_signing_requirement_satisfied": true,
+    "automatic_apply_ui_success": true,
+    "calendar_recheck_ui_success": true,
+    "new_calendar_permission_prompt": false,
+    "minimize_and_hide_keep_regular_policy": true,
+    "close_keeps_process_with_accessory_policy": true,
+    "reopen_restores_regular_policy": true,
+    "command_q_exits": true
+  },
+  "runtime_limits": [
+    "Fully occluded preview behavior verified by visibility predicate and hidden-preview integration, not an instrumented native occlusion run.",
+    "Save-error retry/cancel UI was statically reviewed; storage failure and flush durability tested with temporary files.",
+    "Date/week/wake paths use synthetic notifications and fixtures; actual system clock and sleep were not changed."
+  ]
+}

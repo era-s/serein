@@ -1,7 +1,35 @@
 import AppKit
 import SwiftUI
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    weak var store: AppStore?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        while true {
+            do { try store?.flushPendingSave(); return .terminateNow }
+            catch {
+                let alert = NSAlert()
+                alert.messageText = "작업을 저장하지 못했습니다."
+                alert.informativeText = error.localizedDescription
+                alert.addButton(withTitle: "다시 시도")
+                alert.addButton(withTitle: "종료 취소")
+                if alert.runModal() != .alertFirstButtonReturn { return .terminateCancel }
+            }
+        }
+    }
+
+    func saveBeforeClosingWindow() {
+        do { try store?.flushPendingSave() }
+        catch {
+            let alert = NSAlert()
+            alert.messageText = "아직 저장하지 못한 변경이 있습니다."
+            alert.informativeText = "변경 내용은 실행 중인 앱에 남아 있습니다. 창을 다시 열어 저장을 재시도해주세요.\n" + error.localizedDescription
+            alert.addButton(withTitle: "확인")
+            alert.runModal()
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
 
@@ -36,8 +64,8 @@ struct WallpaperApp: App {
             StudioView().environmentObject(store)
                 .frame(minWidth: 1080, minHeight: 740)
                 .preferredColorScheme(.light)
-                .background(StudioWindowLifecycle(onVisibility: store.setStudioVisible))
-                .onAppear { NSApp.activate(ignoringOtherApps: true) }
+                .background(StudioWindowLifecycle(onVisibility: store.setStudioVisible, onClose: delegate.saveBeforeClosingWindow))
+                .onAppear { delegate.store = store; NSApp.activate(ignoringOtherApps: true) }
         }
         .defaultSize(width: 1320, height: 870)
         .windowStyle(.hiddenTitleBar)

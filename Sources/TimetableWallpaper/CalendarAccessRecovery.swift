@@ -18,8 +18,13 @@ final class CalendarAccessRecovery: ObservableObject {
 
     /// Safe for activation, status displays and background calendar checks.
     func refreshStatus() {
-        access = provider.access
-        if access == .authorized { errorMessage = nil }
+        updateAccess()
+        if access == .authorized, errorMessage != nil { errorMessage = nil }
+    }
+
+    private func updateAccess() {
+        let current = provider.access
+        if access != current { access = current }
     }
 
     /// Call only from the user's reconnect button. A successful result allows
@@ -27,20 +32,20 @@ final class CalendarAccessRecovery: ObservableObject {
     func reconnect() async -> Bool {
         guard !isConnecting, !Task.isCancelled else { return false }
         isConnecting = true
-        errorMessage = nil
+        if errorMessage != nil { errorMessage = nil }
         defer {
-            access = provider.access
+            updateAccess()
             isConnecting = false
         }
         do {
             let granted = try await provider.requestAccess()
             guard !Task.isCancelled else { return false }
-            access = provider.access
+            updateAccess()
             guard granted, access == .authorized else { throw CalendarImportError.permissionDenied }
             return true
         } catch {
             if !Task.isCancelled, !(error is CancellationError) {
-                errorMessage = error.localizedDescription
+                if errorMessage != error.localizedDescription { errorMessage = error.localizedDescription }
             }
             return false
         }

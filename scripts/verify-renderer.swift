@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import ImageIO
+import Vision
 
 /// Executable checks for Command Line Tools installations without XCTest.
 @main
@@ -121,7 +122,71 @@ enum RendererVerification {
                "Existing configurations without weekday fields keep their original ordinal default")
     }
 
+    /// Inspect production pixels rather than source strings. The high-contrast
+    /// shapes/copy used to occupy these otherwise quiet background regions.
+    private static func verifyCleanLayout() throws {
+        var configuration = WallpaperConfiguration()
+        configuration.title = "Create space.\nKeep focus."
+        configuration.subtitle = "FICTIONAL WEEK"
+        configuration.highlightedDay = 2
+        let png = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration,
+                                                size: CGSize(width: 3024, height: 1964))
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["en-US"]
+        request.usesLanguageCorrection = false
+        try VNImageRequestHandler(data: png).perform([request])
+        let recognized = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+            .joined(separator: " ").uppercased()
+        let words = recognized.components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }.joined(separator: " ")
+        for phrase in ["TIME WELL SPENT", "A LITTLE STRUCTURE", "A LOT OF POSSIBILITY",
+                       "WEEKLY RHYTHM", "A PLACE FOR YOUR TIME", "PLAN WITH PURPOSE", "LEAVE ROOM TO PLAY"] {
+            expect(!words.contains(phrase), "Rendered wallpaper omits decorative copy: \(phrase)")
+        }
+        for content in ["CREATE SPACE", "KEEP FOCUS", "FICTIONAL WEEK", "TODAY", "SESSIONS", "HRS"] {
+            expect(words.contains(content), "Clean wallpaper retains readable functional content: \(content)")
+        }
+
+        // Disable grain so only the continuous color field and faint drafting
+        // lines remain. Strong pixel edges reveal a restored globe or slogan.
+        configuration.showTexture = false
+        for size in [CGSize(width: 1512, height: 982), CGSize(width: 3840, height: 2160)] {
+            let scale = size.width / 1512
+            let canvasHeight = size.height / scale
+            let regions = [
+                CGRect(x: 1110, y: 90, width: 275, height: 180),
+                CGRect(x: 148, y: canvasHeight - 138, width: 900, height: 22),
+                CGRect(x: 84, y: canvasHeight - 90, width: 1344, height: 24)
+            ]
+            for theme in WallpaperTheme.allCases {
+                configuration.theme = theme
+                let data = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration, size: size)
+                guard let bitmap = NSBitmapImageRep(data: data), let bytes = bitmap.bitmapData else {
+                    fatalError("Unable to inspect clean-layout pixels")
+                }
+                let stride = bitmap.bitsPerPixel / 8
+                for (index, region) in regions.enumerated() {
+                    var largestStep = 0
+                    for y in Int(region.minY * scale)..<Int(region.maxY * scale) {
+                        for x in Int(region.minX * scale)..<Int(region.maxX * scale) {
+                            let offset = y * bitmap.bytesPerRow + x * stride
+                            for adjacent in [offset + stride, offset + bitmap.bytesPerRow] {
+                                for channel in 0..<3 {
+                                    largestStep = max(largestStep, abs(Int(bytes[offset + channel]) - Int(bytes[adjacent + channel])))
+                                }
+                            }
+                        }
+                    }
+                    expect(largestStep < 20,
+                           "\(theme.rawValue) \(Int(size.width))px decoration region \(index + 1) has only quiet background (edge \(largestStep))")
+                }
+            }
+        }
+    }
+
     static func main() throws {
+        try verifyCleanLayout()
         let size = CGSize(width: 756, height: 491)
         let original = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: .init(), size: size)
         let repeated = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: .init(), size: size)
@@ -275,6 +340,14 @@ enum RendererVerification {
                 let png = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: configuration)
                 try png.write(to: directory.appendingPathComponent("weekday-\(style.rawValue)-demo.png"))
             }
+            var clean = WallpaperConfiguration()
+            clean.subtitle = "2026.09.07 — 2026.09.13"
+            clean.weekdayNumberStyle = .date
+            clean.weekdayDateLabels = dateLabels
+            clean.highlightedDay = 2
+            let cleanPNG = try WallpaperRenderer.pngData(entries: ScheduleEntry.sample, configuration: clean,
+                                                        size: CGSize(width: 3024, height: 1964))
+            try cleanPNG.write(to: directory.appendingPathComponent("clean-wallpaper-demo.png"))
             print("Review images saved to \(directory.path)")
         }
         print("Renderer verification completed: \(checks) checks passed.")

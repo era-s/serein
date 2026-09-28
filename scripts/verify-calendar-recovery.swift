@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// Uses synthetic permissions, calendar events and an in-memory wallpaper sink.
@@ -45,6 +46,14 @@ enum CalendarRecoveryVerification {
         }
         expect(provider.requests == 0 && provider.calendarReads == 0 && provider.eventReads == 0,
                "Status refresh never requests permission or reads calendar data")
+        var publications = 0
+        let observation = recovery.objectWillChange.sink { publications += 1 }
+        for _ in 0..<10 { recovery.refreshStatus() }
+        expect(publications == 0, "Unchanged permission refreshes publish no redundant UI invalidations")
+        provider.access = .denied
+        recovery.refreshStatus()
+        expect(publications == 1, "A genuine permission change still publishes its new access state")
+        withExtendedLifetime(observation) {}
 
         for access in [CalendarAccess.notDetermined, .denied, .restricted] {
             provider.access = access
