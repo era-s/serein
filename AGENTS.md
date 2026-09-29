@@ -1,6 +1,6 @@
 # Development workflow
 
-For development changes in this repository, use the checked-in [prompt-ledger skill](.agents/skills/prompt-ledger/SKILL.md). The user requested milestone commits and pushes, and a record that identifies which prompt produced each result. P010 authorizes publication at `https://github.com/era-s/serein` after privacy review, retaining the original development history.
+For development changes in this repository, use the locally installed prompt-ledger skill when available. Its source and copies under `.agents/skills/` are personal development tools and must remain untracked. Keep milestone commits and pushes linked to their governing prompt IDs. P010 authorizes publication at `https://github.com/era-s/serein` after privacy review, retaining the original development history.
 
 Keep original requests in `docs/prompts/PNNN.md`, actual milestone results and verification in `docs/devlog.md`, and a `Prompt-ID: PNNN` trailer for every governing prompt in milestone commits. Add new IDs for new user requests; preserve earlier requests and their source text. Use relative links to result artifacts so a historical checkout is reviewable. Only record checks that were actually run.
 

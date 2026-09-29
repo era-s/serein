@@ -19,3 +19,6 @@ SereinDevelopmentSigning/
 *.pfx
 *.pem
 *.key
+
+# Personal development skills are installed locally and must not be published.
+/.agents/skills/prompt-ledger/
